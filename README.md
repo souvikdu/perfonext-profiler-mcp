@@ -7,6 +7,7 @@
 - loads `.cpuprofile` files and Chrome trace exports that contain CPU profile data
 - identifies the hottest functions by self time
 - explains caller and callee relationships for a selected function
+- **reads actual source code for hot functions and annotates each line with V8 sample counts** (v0.2.0)
 - compares two profiles to surface regressions and improvements
 - returns deterministic optimization suggestions for common hotspots
 - summarizes loaded profiles so an MCP client can keep context tight
@@ -17,10 +18,28 @@
 |------|-------------|
 | `load_profile` | Parse and load a `.cpuprofile` file or Chrome trace export from disk |
 | `get_hotspots` | Find top functions by self-time |
-| `explain_function` | Explain a function's timing, callers, and callees |
+| `explain_function` | Explain a function's timing, callers, and callees. Pass `includeSource: true` to attach annotated source lines |
+| `read_source_context` | Read the actual source file for a hot function and annotate each line with tick counts from `positionTicks` |
 | `compare_profiles` | Compare two profiles and highlight regressions |
 | `suggest_optimizations` | Generate deterministic optimization suggestions for hot functions |
 | `get_profile_summary` | Summarize one profile or list all loaded profiles |
+
+### `read_source_context` details
+
+```jsonc
+// Input
+{ "profileId": "<id>", "functionName": "myFn", "contextLines": 10 }
+
+// Output (per line)
+{
+  "lineNumber": 42,
+  "content": "  for (let i = 0; i < items.length; i++) {",
+  "ticks": 18,      // V8 samples that landed on this line
+  "isHot": true     // true when ticks >= 50% of peak ticks for this function
+}
+```
+
+Only files inside the current working directory can be read. `file://` URLs and absolute paths are both handled; `http://`, `node:` builtins, and paths outside the project root are rejected.
 
 ## Install
 
@@ -59,6 +78,8 @@ Add this server to VS Code `settings.json`:
 
 - "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
 - "Explain why `processData` is expensive in the loaded profile."
+- "Show me the actual source lines for `processData` and mark which lines are hottest."
+- "Explain `transformResult` and include the annotated source code."
 - "Compare my baseline and current CPU profiles and tell me what got slower."
 - "Suggest optimizations for the top three hotspots."
 

@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/profiler-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for loading and analyzing V8 and Chrome CPU profiles for GitHub Copilot and other MCP clients",
   "type": "module",
   "main": "dist/index.js",

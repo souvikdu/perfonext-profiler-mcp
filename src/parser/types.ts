@@ -30,6 +30,7 @@ export interface AggregatedNode {
   hitCount: number;
   children: number[];
   parent: number | null;
+  positionTicks?: { line: number; ticks: number }[];
 }
 
 export interface ParsedProfile {
