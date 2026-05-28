@@ -9,10 +9,11 @@ import { registerExplainFunction } from './tools/explain-function.js';
 import { registerCompareProfiles } from './tools/compare-profiles.js';
 import { registerSuggestOptimizations } from './tools/suggest-optimizations.js';
 import { registerGetProfileSummary } from './tools/get-profile-summary.js';
+import { registerReadSourceContext } from './tools/read-source-context.js';
 
 const server = new McpServer({
   name: 'perfonext-profiler-mcp',
-  version: '0.1.0',
+  version: '0.2.0',
 });
 
 // Register all tools
@@ -22,6 +23,7 @@ registerExplainFunction(server);
 registerCompareProfiles(server);
 registerSuggestOptimizations(server);
 registerGetProfileSummary(server);
+registerReadSourceContext(server);
 
 // Start server with stdio transport
 const transport = new StdioServerTransport();

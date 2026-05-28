@@ -29,6 +29,7 @@ export function parseCpuProfile(json: string, filename: string): ParsedProfile {
       hitCount: node.hitCount,
       children: node.children ?? [],
       parent: null,
+      positionTicks: node.positionTicks,
     });
   }
 

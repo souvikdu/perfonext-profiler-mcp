@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getProfile } from '../store.js';
 import { getCallersOf, getCalleesOf } from '../parser/call-tree.js';
+import { readSourceContext } from './read-source-context.js';
 
 export function registerExplainFunction(server: McpServer) {
   server.registerTool('explain_function', {
@@ -10,8 +11,12 @@ export function registerExplainFunction(server: McpServer) {
     inputSchema: {
       profileId: z.string().describe('Profile ID returned by load_profile'),
       functionName: z.string().describe('Exact function name to look up'),
+      includeSource: z
+        .boolean()
+        .optional()
+        .describe('When true, include annotated source code lines with per-line tick counts (default: false)'),
     },
-  }, async ({ profileId, functionName }) => {
+  }, async ({ profileId, functionName, includeSource = false }) => {
     const profile = getProfile(profileId);
     if (!profile) {
       return {
@@ -56,18 +61,28 @@ export function registerExplainFunction(server: McpServer) {
       totalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
     }));
 
+    const output: Record<string, unknown> = {
+      ...aggregated,
+      selfTime: `${(aggregated.selfTime / 1000).toFixed(1)}ms`,
+      selfPercent: `${((aggregated.selfTime / profile.totalDuration) * 100).toFixed(1)}%`,
+      totalTime: `${(aggregated.totalTime / 1000).toFixed(1)}ms`,
+      totalPercent: `${((aggregated.totalTime / profile.totalDuration) * 100).toFixed(1)}%`,
+      callers,
+      callees,
+    };
+
+    if (includeSource) {
+      try {
+        output.sourceContext = await readSourceContext(profile, functionName, 10);
+      } catch (err) {
+        output.sourceContext = { error: (err as Error).message };
+      }
+    }
+
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({
-          ...aggregated,
-          selfTime: `${(aggregated.selfTime / 1000).toFixed(1)}ms`,
-          selfPercent: `${((aggregated.selfTime / profile.totalDuration) * 100).toFixed(1)}%`,
-          totalTime: `${(aggregated.totalTime / 1000).toFixed(1)}ms`,
-          totalPercent: `${((aggregated.totalTime / profile.totalDuration) * 100).toFixed(1)}%`,
-          callers,
-          callees,
-        }, null, 2),
+        text: JSON.stringify(output, null, 2),
       }],
     };
   });
