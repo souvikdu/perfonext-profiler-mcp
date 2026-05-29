@@ -1,5 +1,20 @@
 import { AggregatedNode, ParsedProfile } from './types.js';
 
+/**
+ * Extract the npm package name from a V8 URL, or null for user code / builtins.
+ *
+ * Examples:
+ *   file:///app/node_modules/lodash/src/foo.js  → "lodash"
+ *   file:///app/node_modules/@babel/core/lib/index.js → "@babel/core"
+ *   file:///app/src/utils.ts → null
+ *   "" (native/builtin) → null
+ */
+export function extractPackageName(url: string): string | null {
+  if (!url) return null;
+  const match = /node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(url);
+  return match ? match[1] : null;
+}
+
 export interface HotspotEntry {
   functionName: string;
   url: string;
@@ -9,6 +24,7 @@ export interface HotspotEntry {
   selfPercent: number;
   totalPercent: number;
   hitCount: number;
+  package: string | null;
 }
 
 export function getHotspots(profile: ParsedProfile, limit: number): HotspotEntry[] {
@@ -26,6 +42,7 @@ export function getHotspots(profile: ParsedProfile, limit: number): HotspotEntry
     selfPercent: (n.selfTime / profile.totalDuration) * 100,
     totalPercent: (n.totalTime / profile.totalDuration) * 100,
     hitCount: n.hitCount,
+    package: extractPackageName(n.callFrame.url),
   }));
 }
 
