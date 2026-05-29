@@ -5,9 +5,10 @@
 ## What It Does
 
 - loads `.cpuprofile` files and Chrome trace exports that contain CPU profile data
-- identifies the hottest functions by self time
+- identifies the hottest functions by self time, annotated with the originating npm package
 - explains caller and callee relationships for a selected function
 - **reads actual source code for hot functions and annotates each line with V8 sample counts** (v0.2.0)
+- **aggregates CPU self-time per npm package to find expensive third-party dependencies** (v0.3.0)
 - compares two profiles to surface regressions and improvements
 - returns deterministic optimization suggestions for common hotspots
 - summarizes loaded profiles so an MCP client can keep context tight
@@ -17,9 +18,10 @@
 | Tool | Description |
 |------|-------------|
 | `load_profile` | Parse and load a `.cpuprofile` file or Chrome trace export from disk |
-| `get_hotspots` | Find top functions by self-time |
+| `get_hotspots` | Find top functions by self-time. Each entry includes a `package` field identifying the npm package or `(user code)` |
 | `explain_function` | Explain a function's timing, callers, and callees. Pass `includeSource: true` to attach annotated source lines |
 | `read_source_context` | Read the actual source file for a hot function and annotate each line with tick counts from `positionTicks` |
+| `get_package_costs` | Aggregate CPU self-time by npm package — shows which dependencies are most expensive |
 | `compare_profiles` | Compare two profiles and highlight regressions |
 | `suggest_optimizations` | Generate deterministic optimization suggestions for hot functions |
 | `get_profile_summary` | Summarize one profile or list all loaded profiles |
@@ -40,6 +42,28 @@
 ```
 
 Only files inside the current working directory can be read. `file://` URLs and absolute paths are both handled; `http://`, `node:` builtins, and paths outside the project root are rejected.
+
+### `get_package_costs` details
+
+```jsonc
+// Input
+{ "profileId": "<id>", "limit": 10 }
+
+// Output (per package)
+{
+  "rank": 1,
+  "package": "lodash",
+  "selfTime": "42.3ms",
+  "selfPercent": "14.1%",
+  "totalTime": "58.0ms",
+  "totalPercent": "19.3%",
+  "topFunctions": [
+    { "function": "chunk", "selfTime": "28.0ms", "selfPercent": "9.3%" }
+  ]
+}
+```
+
+Scoped packages (`@babel/core`, `@next/env`, etc.) are handled correctly. User code and native builtins (no `node_modules` in the path) are excluded.
 
 ## Install
 
@@ -77,6 +101,7 @@ Add this server to VS Code `settings.json`:
 ## Example Copilot Prompts
 
 - "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
+- "Which npm packages are consuming the most CPU in this profile?"
 - "Explain why `processData` is expensive in the loaded profile."
 - "Show me the actual source lines for `processData` and mark which lines are hottest."
 - "Explain `transformResult` and include the annotated source code."

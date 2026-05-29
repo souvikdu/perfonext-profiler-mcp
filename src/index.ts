@@ -10,10 +10,11 @@ import { registerCompareProfiles } from './tools/compare-profiles.js';
 import { registerSuggestOptimizations } from './tools/suggest-optimizations.js';
 import { registerGetProfileSummary } from './tools/get-profile-summary.js';
 import { registerReadSourceContext } from './tools/read-source-context.js';
+import { registerGetPackageCosts } from './tools/get-package-costs.js';
 
 const server = new McpServer({
   name: 'perfonext-profiler-mcp',
-  version: '0.2.0',
+  version: '0.3.0',
 });
 
 // Register all tools
@@ -24,6 +25,7 @@ registerCompareProfiles(server);
 registerSuggestOptimizations(server);
 registerGetProfileSummary(server);
 registerReadSourceContext(server);
+registerGetPackageCosts(server);
 
 // Start server with stdio transport
 const transport = new StdioServerTransport();
