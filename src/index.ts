@@ -14,7 +14,7 @@ import { registerGetPackageCosts } from './tools/get-package-costs.js';
 
 const server = new McpServer({
   name: 'perfonext-profiler-mcp',
-  version: '0.3.0',
+  version: '0.4.0',
 });
 
 // Register all tools

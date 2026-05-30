@@ -1,5 +1,7 @@
 # perfonext-profiler-mcp
 
+[![npm](https://img.shields.io/npm/v/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+
 `perfonext-profiler-mcp` is an MCP server for loading and analyzing V8 and Chrome CPU profiles. It gives GitHub Copilot and other MCP clients structured performance data they can reason over instead of forcing the model to ingest multi-megabyte profile dumps.
 
 ## What It Does
@@ -23,7 +25,7 @@
 | `read_source_context` | Read the actual source file for a hot function and annotate each line with tick counts from `positionTicks` |
 | `get_package_costs` | Aggregate CPU self-time by npm package — shows which dependencies are most expensive |
 | `compare_profiles` | Compare two profiles and highlight regressions |
-| `suggest_optimizations` | Generate deterministic optimization suggestions for hot functions |
+| `suggest_optimizations` | Generate structured, multi-pattern optimization suggestions for hot functions. Detects high fan-in, recursion, dominant callers, and V8-specific patterns. Deduplicates functions split across multiple call sites |
 | `get_profile_summary` | Summarize one profile or list all loaded profiles |
 
 ### `read_source_context` details
@@ -42,6 +44,49 @@
 ```
 
 Only files inside the current working directory can be read. `file://` URLs and absolute paths are both handled; `http://`, `node:` builtins, and paths outside the project root are rejected.
+
+### `suggest_optimizations` details
+
+```jsonc
+// Input
+{ "profileId": "<id>", "limit": 5 }
+
+// Output (per function)
+{
+  "function": "processData",
+  "file": "file:///app/src/processor.js",
+  "line": 10,
+  "selfPercent": "18.2%",
+  "patterns": [
+    {
+      "pattern": "high-fan-in",
+      "detail": "Called from 6 distinct call sites (e.g. renderRow, buildTree, …)",
+      "suggestion": "This function is a shared hot path. Ensure it is well-optimised and monomorphic …"
+    },
+    {
+      "pattern": "hot-caller",
+      "detail": "84% of calls come from \"renderRow\"",
+      "suggestion": "Focus optimisation effort on \"renderRow\" rather than this function …"
+    }
+  ],
+  "topSuggestion": "This function is a shared hot path …"
+}
+```
+
+Patterns detected (multiple can fire for the same function):
+
+| Pattern | Trigger |
+|---|---|
+| `gc-pressure` | Function name matches GC/Scavenge/MarkCompact |
+| `json-serialization` | `JSON.parse` / `JSON.stringify` |
+| `regex-cost` | RegExp / `exec` / `test` calls |
+| `v8-deopt` | Compile / Recompile / Optimize / Deoptimize |
+| `high-fan-in` | ≥ 3 distinct parent call sites |
+| `recursion` | Function appears in its own descendant sub-tree |
+| `hot-caller` | One caller accounts for ≥ 80% of call-site occurrences |
+| `cpu-bound` | Fallback when no other pattern matches |
+
+Functions that appear at multiple call sites are automatically merged before ranking so the same logical function is only reported once.
 
 ### `get_package_costs` details
 
