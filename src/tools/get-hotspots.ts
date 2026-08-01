@@ -33,10 +33,14 @@ export function registerGetHotspots(server: McpServer) {
       totalPercent: `${h.totalPercent.toFixed(1)}%`,
     }));
 
+    const nextStep = formatted.length > 0
+      ? `Call explain_function with profileId '${profileId}' and functionName '${formatted[0].function}' to see its callers and callees, or suggest_optimizations for ranked fixes.`
+      : 'No hotspots found. Confirm the profile captured active work (see get_profile_summary).';
+
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify(formatted, null, 2),
+        text: JSON.stringify({ hotspots: formatted, nextStep }, null, 2),
       }],
     };
   });

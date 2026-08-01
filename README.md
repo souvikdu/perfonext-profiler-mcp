@@ -19,6 +19,7 @@
 
 | Tool | Description |
 |------|-------------|
+| `how_to_collect` | Return a ready-to-run command and step-by-step recipe for capturing a `.cpuprofile`, then loading it. Use this when you don't have a profile yet |
 | `load_profile` | Parse and load a `.cpuprofile` file or Chrome trace export from disk |
 | `get_hotspots` | Find top functions by self-time. Each entry includes a `package` field identifying the npm package or `(user code)` |
 | `explain_function` | Explain a function's timing, callers, and callees. Pass `includeSource: true` to attach annotated source lines |
@@ -27,6 +28,27 @@
 | `compare_profiles` | Compare two profiles and highlight regressions |
 | `suggest_optimizations` | Generate structured, multi-pattern optimization suggestions for hot functions. Detects high fan-in, recursion, dominant callers, and V8-specific patterns. Deduplicates functions split across multiple call sites |
 | `get_profile_summary` | Summarize one profile or list all loaded profiles |
+
+Every tool result carries a `nextStep` breadcrumb pointing at the natural follow-up call, so an MCP client can walk the collect → analyze → fix loop without guessing.
+
+### `how_to_collect` details
+
+```jsonc
+// Input
+{ "scenario": "next-server" } // or "script"; defaults to "next-server"
+
+// Output
+{
+  "scenario": "next-server",
+  "summary": "Profile a production Next.js server while it handles a single request. ...",
+  "command": "NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start",
+  "steps": [ "...", "load_profile({ filePath: \"./.perf-profiles/<file>.cpuprofile\" })" ],
+  "outputDir": "./.perf-profiles",
+  "nextStep": "After stopping the server, call load_profile with the .cpuprofile ..."
+}
+```
+
+`next-server` profiles a production Next.js server while it serves a single request; `script` profiles a standalone Node.js script. Node writes one `.cpuprofile` per process/worker thread into the output directory. The `command` uses bash/zsh env-var syntax (`NODE_OPTIONS='...' next start`); on Windows PowerShell, set `$env:NODE_OPTIONS` first.
 
 ### `read_source_context` details
 
@@ -145,6 +167,7 @@ Add this server to VS Code `settings.json`:
 
 ## Example Copilot Prompts
 
+- "How do I capture a CPU profile of my Next.js server?"
 - "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
 - "Which npm packages are consuming the most CPU in this profile?"
 - "Explain why `processData` is expensive in the loaded profile."
@@ -165,10 +188,19 @@ The repository already includes sample fixtures under `tests/fixtures/` for loca
 
 ## Generating a CPU Profile
 
-Node.js:
+Ask Copilot to call `how_to_collect` for a ready-to-run recipe, or generate one manually:
+
+Next.js production server (profile a single request):
 
 ```bash
-node --cpu-prof your-script.js
+NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start
+# hit the route once, then Ctrl-C to flush the profile
+```
+
+Standalone Node.js script:
+
+```bash
+node --cpu-prof --cpu-prof-dir=./.perf-profiles your-script.js
 ```
 
 Chrome DevTools:
