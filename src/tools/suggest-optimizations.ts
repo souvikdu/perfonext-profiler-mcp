@@ -338,10 +338,14 @@ export function registerSuggestOptimizations(server: McpServer) {
       };
     });
 
+    const nextStep = suggestions.length > 0
+      ? `Call read_source_context with functionName '${suggestions[0].function}' to see the hottest lines before applying a fix.`
+      : 'No suggestions generated. Confirm the profile captured active work via get_profile_summary.';
+
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify(suggestions, null, 2),
+        text: JSON.stringify({ suggestions, nextStep }, null, 2),
       }],
     };
   });

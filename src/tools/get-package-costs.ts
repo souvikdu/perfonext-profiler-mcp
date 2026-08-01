@@ -142,8 +142,10 @@ export function registerGetPackageCosts(server: McpServer): void {
         })),
       }));
 
+      const nextStep = `Call suggest_optimizations for ranked fixes, or explain_function on a top function from '${formatted[0].package}' to see where its CPU time goes.`;
+
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(formatted, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ packages: formatted, nextStep }, null, 2) }],
       };
     },
   );

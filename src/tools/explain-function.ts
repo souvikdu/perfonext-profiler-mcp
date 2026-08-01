@@ -79,6 +79,10 @@ export function registerExplainFunction(server: McpServer) {
       }
     }
 
+    output.nextStep = includeSource
+      ? `Call suggest_optimizations to get ranked, pattern-based fixes for the hottest functions.`
+      : `Call read_source_context with functionName '${functionName}' to see which source lines are hottest, or explain_function again with includeSource: true.`;
+
     return {
       content: [{
         type: 'text' as const,

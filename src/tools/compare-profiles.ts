@@ -65,6 +65,12 @@ export function registerCompareProfiles(server: McpServer) {
           `${d.percentChange > 0 ? '+' : ''}${d.percentChange.toFixed(1)}%`,
         status: d.delta > 0 ? 'slower' : d.delta < 0 ? 'faster' : 'unchanged',
       })),
+      nextStep: (() => {
+        const slower = topChanges.find(d => d.delta > 0);
+        return slower
+          ? `Call explain_function with functionName '${slower.functionName}' on profileId '${compareProfileId}' to see why it got slower.`
+          : `No regressions in the top changes. Call get_hotspots on profileId '${compareProfileId}' to inspect the current hotspots.`;
+      })(),
     };
 
     return {

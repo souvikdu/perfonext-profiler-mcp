@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/profiler-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "MCP server for loading and analyzing V8 and Chrome CPU profiles for GitHub Copilot and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "build": "tsc && chmod +x dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "inspector": "mcp-inspector node dist/index.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -36,18 +36,19 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/souvikxcoder/perfonext-profiler-mcp.git"
+    "url": "git+https://github.com/souvikdu/perfonext-profiler-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/souvikxcoder/perfonext-profiler-mcp/issues"
+    "url": "https://github.com/souvikdu/perfonext-profiler-mcp/issues"
   },
-  "homepage": "https://github.com/souvikxcoder/perfonext-profiler-mcp#readme",
+  "homepage": "https://github.com/souvikdu/perfonext-profiler-mcp#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/inspector": "^2.0.0",
     "@types/node": "^25.6.0",
     "shx": "^0.4.0",
     "typescript": "^6.0.3",

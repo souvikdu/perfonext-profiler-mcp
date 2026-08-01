@@ -166,7 +166,17 @@ export function registerReadSourceContext(server: McpServer): void {
       try {
         const result = await readSourceContext(profile, functionName, contextLines);
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify(
+              {
+                ...result,
+                nextStep: `Call suggest_optimizations for pattern-based fixes, or explain_function with functionName '${functionName}' to inspect its callers and callees.`,
+              },
+              null,
+              2,
+            ),
+          }],
         };
       } catch (err) {
         return {

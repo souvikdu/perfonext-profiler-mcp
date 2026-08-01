@@ -27,6 +27,7 @@ export function registerLoadProfile(server: McpServer) {
           totalDuration: `${(profile.totalDuration / 1000).toFixed(1)}ms`,
           sampleCount: profile.sampleCount,
           nodeCount: profile.nodes.size,
+          nextStep: `Call get_hotspots with profileId '${profile.id}' to find the top functions by self-time.`,
         }, null, 2),
       }],
     };

@@ -22,7 +22,10 @@ export function registerGetProfileSummary(server: McpServer) {
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify({ loadedProfiles: profiles.map(p => ({ ...p, duration: `${(p.duration / 1000).toFixed(1)}ms` })) }, null, 2),
+          text: JSON.stringify({
+            loadedProfiles: profiles.map(p => ({ ...p, duration: `${(p.duration / 1000).toFixed(1)}ms` })),
+            nextStep: `Call get_hotspots with one of the profileId values above to find its top functions.`,
+          }, null, 2),
         }],
       };
     }
@@ -53,6 +56,7 @@ export function registerGetProfileSummary(server: McpServer) {
       idlePercent: `${((idleTime / profile.totalDuration) * 100).toFixed(1)}%`,
       activePercent: `${(((profile.totalDuration - idleTime) / profile.totalDuration) * 100).toFixed(1)}%`,
       callTree: tree,
+      nextStep: `Call get_hotspots with profileId '${profileId}' to rank functions by self-time.`,
     };
 
     return {
