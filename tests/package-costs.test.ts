@@ -11,7 +11,9 @@ describe('extractPackageName', () => {
   });
 
   it('extracts a scoped package name', () => {
-    expect(extractPackageName('file:///app/node_modules/@babel/core/lib/index.js')).toBe('@babel/core');
+    expect(extractPackageName('file:///app/node_modules/@babel/core/lib/index.js')).toBe(
+      '@babel/core',
+    );
   });
 
   it('extracts nested node_modules correctly (picks outermost match)', () => {
@@ -49,13 +51,25 @@ function buildMultiPkgProfileJson() {
   const nodes = [
     {
       id: 1,
-      callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+      callFrame: {
+        functionName: '(root)',
+        scriptId: '0',
+        url: '',
+        lineNumber: -1,
+        columnNumber: -1,
+      },
       hitCount: 0,
       children: [2, 7],
     },
     {
       id: 2,
-      callFrame: { functionName: '(program)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+      callFrame: {
+        functionName: '(program)',
+        scriptId: '0',
+        url: '',
+        lineNumber: -1,
+        columnNumber: -1,
+      },
       hitCount: 0,
       children: [3, 4, 5, 6],
     },
@@ -109,7 +123,13 @@ function buildMultiPkgProfileJson() {
     },
     {
       id: 7,
-      callFrame: { functionName: '(idle)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+      callFrame: {
+        functionName: '(idle)',
+        scriptId: '0',
+        url: '',
+        lineNumber: -1,
+        columnNumber: -1,
+      },
       hitCount: 10,
       children: [],
     },
@@ -117,11 +137,11 @@ function buildMultiPkgProfileJson() {
 
   // 50 samples total; distribute matching hitCounts above
   const samples: number[] = [
-    ...Array(12).fill(3),  // lodash/chunk
-    ...Array(8).fill(4),   // lodash/merge
-    ...Array(15).fill(5),  // @scope/pkg
-    ...Array(5).fill(6),   // user code
-    ...Array(10).fill(7),  // idle
+    ...Array(12).fill(3), // lodash/chunk
+    ...Array(8).fill(4), // lodash/merge
+    ...Array(15).fill(5), // @scope/pkg
+    ...Array(5).fill(6), // user code
+    ...Array(10).fill(7), // idle
   ];
   const timeDeltas = new Array(50).fill(10000);
 
@@ -145,7 +165,7 @@ describe('computePackageCosts', () => {
   it('lodash combined self-time equals chunk + merge', () => {
     const profile = parseCpuProfile(buildMultiPkgProfileJson(), 'test.cpuprofile');
     const costs = computePackageCosts(profile, 10);
-    const lodash = costs.find(c => c.package === 'lodash')!;
+    const lodash = costs.find((c) => c.package === 'lodash')!;
     expect(lodash.selfTime).toBe(200000); // (12 + 8) * 10 000
     expect(lodash.nodeCount).toBe(2);
   });
@@ -153,7 +173,7 @@ describe('computePackageCosts', () => {
   it('@scope/pkg scoped package is handled correctly', () => {
     const profile = parseCpuProfile(buildMultiPkgProfileJson(), 'test.cpuprofile');
     const costs = computePackageCosts(profile, 10);
-    const scoped = costs.find(c => c.package === '@scope/pkg')!;
+    const scoped = costs.find((c) => c.package === '@scope/pkg')!;
     expect(scoped).toBeDefined();
     expect(scoped.selfTime).toBe(150000); // 15 * 10 000
     expect(scoped.topFunctions[0].functionName).toBe('transform');
@@ -170,8 +190,30 @@ describe('computePackageCosts', () => {
     // Use the original sample fixture which has no node_modules URLs
     const noModsJson = JSON.stringify({
       nodes: [
-        { id: 1, callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 }, hitCount: 0, children: [2] },
-        { id: 2, callFrame: { functionName: 'userFn', scriptId: '1', url: 'file:///app/src/app.js', lineNumber: 0, columnNumber: 0 }, hitCount: 10, children: [] },
+        {
+          id: 1,
+          callFrame: {
+            functionName: '(root)',
+            scriptId: '0',
+            url: '',
+            lineNumber: -1,
+            columnNumber: -1,
+          },
+          hitCount: 0,
+          children: [2],
+        },
+        {
+          id: 2,
+          callFrame: {
+            functionName: 'userFn',
+            scriptId: '1',
+            url: 'file:///app/src/app.js',
+            lineNumber: 0,
+            columnNumber: 0,
+          },
+          hitCount: 10,
+          children: [],
+        },
       ],
       startTime: 0,
       endTime: 100000,
@@ -197,13 +239,13 @@ describe('getHotspots package field', () => {
     const profile = parseCpuProfile(buildMultiPkgProfileJson(), 'test.cpuprofile');
     const hotspots = getHotspots(profile, 10);
 
-    const chunk = hotspots.find(h => h.functionName === 'chunk');
+    const chunk = hotspots.find((h) => h.functionName === 'chunk');
     expect(chunk?.package).toBe('lodash');
 
-    const transform = hotspots.find(h => h.functionName === 'transform');
+    const transform = hotspots.find((h) => h.functionName === 'transform');
     expect(transform?.package).toBe('@scope/pkg');
 
-    const user = hotspots.find(h => h.functionName === 'processItems');
+    const user = hotspots.find((h) => h.functionName === 'processItems');
     expect(user?.package).toBeNull();
   });
 });

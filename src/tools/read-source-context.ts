@@ -57,21 +57,18 @@ export async function readSourceContext(
 ): Promise<SourceContextResult> {
   // Collect all nodes matching the function name that have a resolvable file URL
   const matches = Array.from(profile.nodes.values()).filter(
-    n => n.callFrame.functionName === functionName && n.callFrame.url,
+    (n) => n.callFrame.functionName === functionName && n.callFrame.url,
   );
 
   if (matches.length === 0) {
     throw new Error(
       `Function "${functionName}" not found in profile or has no associated source URL. ` +
-      `Check the exact name using get_hotspots.`,
+        `Check the exact name using get_hotspots.`,
     );
   }
 
   // Pick the node with the highest hit count as the canonical location
-  const primary = matches.reduce(
-    (best, n) => n.hitCount > best.hitCount ? n : best,
-    matches[0],
-  );
+  const primary = matches.reduce((best, n) => (n.hitCount > best.hitCount ? n : best), matches[0]);
 
   const { url, lineNumber: rawLine } = primary.callFrame;
   const filePath = fileUrlToPath(url);
@@ -79,14 +76,14 @@ export async function readSourceContext(
   if (!filePath) {
     throw new Error(
       `Cannot read source: unsupported URL scheme for "${url}". ` +
-      `Only file:// URLs and absolute paths are supported.`,
+        `Only file:// URLs and absolute paths are supported.`,
     );
   }
 
   if (!isWithinCwd(filePath)) {
     throw new Error(
       `Access denied: "${filePath}" is outside the current working directory. ` +
-      `The server only reads source files within the project root.`,
+        `The server only reads source files within the project root.`,
     );
   }
 
@@ -166,17 +163,19 @@ export function registerReadSourceContext(server: McpServer): void {
       try {
         const result = await readSourceContext(profile, functionName, contextLines);
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                ...result,
-                nextStep: `Call suggest_optimizations for pattern-based fixes, or explain_function with functionName '${functionName}' to inspect its callers and callees.`,
-              },
-              null,
-              2,
-            ),
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  ...result,
+                  nextStep: `Call suggest_optimizations for pattern-based fixes, or explain_function with functionName '${functionName}' to inspect its callers and callees.`,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
       } catch (err) {
         return {

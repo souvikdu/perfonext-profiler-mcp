@@ -63,7 +63,9 @@ describe('call-tree analysis', () => {
     }
 
     // Should not include (idle) or (root)
-    expect(hotspots.every(h => h.functionName !== '(idle)' && h.functionName !== '(root)')).toBe(true);
+    expect(hotspots.every((h) => h.functionName !== '(idle)' && h.functionName !== '(root)')).toBe(
+      true,
+    );
   });
 
   it('builds a call tree', async () => {
@@ -121,7 +123,7 @@ describe('Chrome Trace JSON parser', () => {
 
     const hotspots = getHotspots(profile, 10);
     // JSON.parse, layout, render, and main should all have self-time
-    const names = hotspots.map(h => h.functionName);
+    const names = hotspots.map((h) => h.functionName);
     expect(names).toContain('JSON.parse');
     expect(names).toContain('layout');
   });

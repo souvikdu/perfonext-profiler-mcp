@@ -15,9 +15,7 @@ describe('how_to_collect recipe', () => {
   it('returns a node --cpu-prof command for the script scenario', () => {
     const recipe = buildCollectRecipe('script');
     expect(recipe.scenario).toBe('script');
-    expect(recipe.command).toBe(
-      'node --cpu-prof --cpu-prof-dir=./.perf-profiles your-script.js',
-    );
+    expect(recipe.command).toBe('node --cpu-prof --cpu-prof-dir=./.perf-profiles your-script.js');
   });
 
   it('always includes a nextStep pointing at load_profile', () => {

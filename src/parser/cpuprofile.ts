@@ -1,4 +1,4 @@
-import { CpuProfile, ProfileNode, AggregatedNode, ParsedProfile } from './types.js';
+import { CpuProfile, AggregatedNode, ParsedProfile } from './types.js';
 import { randomUUID } from 'node:crypto';
 import { detectFormat, parseTraceProfile } from './trace.js';
 

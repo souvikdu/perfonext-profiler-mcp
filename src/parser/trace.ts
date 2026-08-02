@@ -36,10 +36,6 @@ interface TraceProfileNode {
   hitCount?: number;
 }
 
-interface TraceFile {
-  traceEvents?: TraceEvent[];
-}
-
 /**
  * Detects whether the JSON string is a Chrome Trace format or V8 .cpuprofile format.
  */
@@ -67,12 +63,15 @@ export function parseTraceProfile(json: string): CpuProfile {
 
   // Filter to CPU profiler events
   const cpuEvents = events.filter(
-    e => e.cat === 'disabled-by-default-v8.cpu_profiler' ||
-         e.cat === 'disabled-by-default-v8.cpu_profiler.hires'
+    (e) =>
+      e.cat === 'disabled-by-default-v8.cpu_profiler' ||
+      e.cat === 'disabled-by-default-v8.cpu_profiler.hires',
   );
 
   if (cpuEvents.length === 0) {
-    throw new Error('No CPU profiler data found in trace. Make sure the recording includes JavaScript profiling.');
+    throw new Error(
+      'No CPU profiler data found in trace. Make sure the recording includes JavaScript profiling.',
+    );
   }
 
   // Pick the main thread (usually has the most profile data)
@@ -88,7 +87,7 @@ export function parseTraceProfile(json: string): CpuProfile {
   if (byThread.size > 1) {
     // Pick thread with most events
     let maxCount = 0;
-    for (const [tid, evts] of byThread) {
+    for (const [_tid, evts] of byThread) {
       if (evts.length > maxCount) {
         maxCount = evts.length;
         targetEvents = evts;
@@ -150,7 +149,7 @@ export function parseTraceProfile(json: string): CpuProfile {
     }
   }
 
-  const profileNodes: ProfileNode[] = allNodes.map(n => ({
+  const profileNodes: ProfileNode[] = allNodes.map((n) => ({
     id: n.id,
     callFrame: n.callFrame,
     hitCount: n.hitCount ?? 0,

@@ -22,7 +22,13 @@ function makeNode(
 ): AggregatedNode {
   return {
     id,
-    callFrame: { functionName, scriptId: '1', url: 'file:///app/src/index.js', lineNumber: id, columnNumber: 0 },
+    callFrame: {
+      functionName,
+      scriptId: '1',
+      url: 'file:///app/src/index.js',
+      lineNumber: id,
+      columnNumber: 0,
+    },
     hitCount: 1,
     selfTime,
     totalTime,
@@ -45,8 +51,8 @@ function makeProfile(nodes: AggregatedNode[], id = 'test-profile'): ParsedProfil
   };
 }
 
-// ─── Import helpers under test (they are not currently re-exported, so we      
-//     exercise them indirectly through the full tool via the fixture profile)  
+// ─── Import helpers under test (they are not currently re-exported, so we
+//     exercise them indirectly through the full tool via the fixture profile)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { readFile } from 'node:fs/promises';
@@ -75,7 +81,7 @@ describe('suggest_optimizations – deduplication', () => {
     const raw = getHotspots(profile, 10);
     const deduped = deduplicateHotspots(raw, profile.totalDuration);
 
-    const hotFnEntries = deduped.filter(h => h.functionName === 'hotFn');
+    const hotFnEntries = deduped.filter((h) => h.functionName === 'hotFn');
     // After dedup: exactly one entry for hotFn
     expect(hotFnEntries).toHaveLength(1);
     // Merged selfTime should equal sum of both nodes (100 + 80)
@@ -197,14 +203,22 @@ describe('suggest_optimizations – name-based patterns', () => {
     const profile = await loadFixtureProfile();
     const { getHotspots } = await import('../src/parser/call-tree.js');
     const hotspots = getHotspots(profile, 20);
-    const jsonParseHotspot = hotspots.find(h => h.functionName === 'JSON.parse');
+    const jsonParseHotspot = hotspots.find((h) => h.functionName === 'JSON.parse');
     expect(jsonParseHotspot).toBeDefined();
   });
 
   it('GC function name matches gc-pressure pattern', () => {
-    const gcNames = ['(garbage collector)', 'GC prologue', 'Scavenge', 'MarkCompact', 'IncrementalMark'];
+    const gcNames = [
+      '(garbage collector)',
+      'GC prologue',
+      'Scavenge',
+      'MarkCompact',
+      'IncrementalMark',
+    ];
     for (const name of gcNames) {
-      expect(/\(garbage collector\)|\bGC\b|Scavenge|MarkCompact|IncrementalMark/.test(name)).toBe(true);
+      expect(/\(garbage collector\)|\bGC\b|Scavenge|MarkCompact|IncrementalMark/.test(name)).toBe(
+        true,
+      );
     }
   });
 
@@ -254,7 +268,7 @@ describe('suggest_optimizations – full tool', () => {
     const { getHotspots } = await import('../src/parser/call-tree.js');
     const raw = getHotspots(profile, 10);
     const deduped = deduplicateHotspots(raw, profile.totalDuration);
-    const sharedWorkEntries = deduped.filter(h => h.functionName === 'sharedWork');
+    const sharedWorkEntries = deduped.filter((h) => h.functionName === 'sharedWork');
     expect(sharedWorkEntries).toHaveLength(1);
     expect(sharedWorkEntries[0].selfTime).toBe(350); // 200 + 150
   });

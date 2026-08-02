@@ -1,5 +1,7 @@
 // Minimal McpServer stub that captures registered tool handlers for direct invocation in tests.
-type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>;
+type ToolHandler = (
+  args: Record<string, unknown>,
+) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>;
 
 export function createToolHandlerStub() {
   const handlers = new Map<string, ToolHandler>();

@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/profiler-mcp",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MCP server for loading and analyzing V8 and Chrome CPU profiles for GitHub Copilot and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
@@ -17,9 +17,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "tsc && shx chmod +x dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "inspector": "mcp-inspector node dist/index.js",
     "prepublishOnly": "npm run build"
   },
@@ -48,10 +52,16 @@
     "zod": "^4.4.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@modelcontextprotocol/inspector": "^2.0.0",
     "@types/node": "^25.6.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.1",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
     "shx": "^0.4.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.18.2",
     "vitest": "^3.2.4"
   }
 }

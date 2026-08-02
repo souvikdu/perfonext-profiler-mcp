@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
 import { parseCpuProfile } from '../src/parser/cpuprofile.js';
-import {
-  readSourceContext,
-  fileUrlToPath,
-  isWithinCwd,
-} from '../src/tools/read-source-context.js';
+import { readSourceContext, fileUrlToPath, isWithinCwd } from '../src/tools/read-source-context.js';
 
 // Absolute path to the fixture source file we will reference in test profiles
 const fixtureSourcePath = resolve(import.meta.dirname, 'fixtures/sample-source.js');
@@ -19,7 +15,13 @@ function buildProfileJson(lineNumber: number, positionTicks: { line: number; tic
     nodes: [
       {
         id: 1,
-        callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+        callFrame: {
+          functionName: '(root)',
+          scriptId: '0',
+          url: '',
+          lineNumber: -1,
+          columnNumber: -1,
+        },
         hitCount: 0,
         children: [2],
       },
@@ -29,7 +31,7 @@ function buildProfileJson(lineNumber: number, positionTicks: { line: number; tic
           functionName: 'heavyComputation',
           scriptId: '1',
           url: `file://${fixtureSourcePath}`,
-          lineNumber,  // 0-based
+          lineNumber, // 0-based
           columnNumber: 0,
         },
         hitCount: 20,
@@ -97,13 +99,13 @@ describe('readSourceContext', () => {
     expect(result.endLine).toBeGreaterThan(result.startLine);
 
     // Line 5 has the most ticks — it should be marked hot
-    const hotLine = result.lines.find(l => l.lineNumber === 5);
+    const hotLine = result.lines.find((l) => l.lineNumber === 5);
     expect(hotLine).toBeDefined();
     expect(hotLine!.ticks).toBe(12);
     expect(hotLine!.isHot).toBe(true);
 
     // Line 4 has fewer ticks — hot threshold is >= 50% of max (12), so 3 < 6 → not hot
-    const coolLine = result.lines.find(l => l.lineNumber === 4);
+    const coolLine = result.lines.find((l) => l.lineNumber === 4);
     expect(coolLine).toBeDefined();
     expect(coolLine!.ticks).toBe(3);
     expect(coolLine!.isHot).toBe(false);
@@ -116,7 +118,7 @@ describe('readSourceContext', () => {
     const result = await readSourceContext(profile, 'heavyComputation', 3);
 
     expect(result.totalTicks).toBe(0);
-    expect(result.lines.every(l => l.ticks === 0 && !l.isHot)).toBe(true);
+    expect(result.lines.every((l) => l.ticks === 0 && !l.isHot)).toBe(true);
   });
 
   it('throws when function is not in the profile', async () => {
@@ -133,7 +135,13 @@ describe('readSourceContext', () => {
       nodes: [
         {
           id: 1,
-          callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+          callFrame: {
+            functionName: '(root)',
+            scriptId: '0',
+            url: '',
+            lineNumber: -1,
+            columnNumber: -1,
+          },
           hitCount: 0,
           children: [2],
         },

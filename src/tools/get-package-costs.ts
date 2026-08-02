@@ -64,7 +64,7 @@ export function computePackageCosts(
     const topFunctions = (nodesMap.get(pkg) ?? [])
       .sort((a, b) => b.selfTime - a.selfTime)
       .slice(0, topFunctionsPerPkg)
-      .map(n => ({
+      .map((n) => ({
         functionName: n.functionName,
         url: n.url,
         selfTime: n.selfTime,
@@ -82,9 +82,7 @@ export function computePackageCosts(
     });
   }
 
-  return entries
-    .sort((a, b) => b.selfTime - a.selfTime)
-    .slice(0, limit);
+  return entries.sort((a, b) => b.selfTime - a.selfTime).slice(0, limit);
 }
 
 export function registerGetPackageCosts(server: McpServer): void {
@@ -121,10 +119,12 @@ export function registerGetPackageCosts(server: McpServer): void {
 
       if (costs.length === 0) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: 'No npm package frames found in this profile. All CPU time is in user code or native builtins.',
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'No npm package frames found in this profile. All CPU time is in user code or native builtins.',
+            },
+          ],
         };
       }
 
@@ -135,7 +135,7 @@ export function registerGetPackageCosts(server: McpServer): void {
         selfPercent: `${c.selfPercent.toFixed(1)}%`,
         totalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
         totalPercent: `${c.totalPercent.toFixed(1)}%`,
-        topFunctions: c.topFunctions.map(f => ({
+        topFunctions: c.topFunctions.map((f) => ({
           function: f.functionName,
           selfTime: `${(f.selfTime / 1000).toFixed(1)}ms`,
           selfPercent: `${f.selfPercent.toFixed(1)}%`,
@@ -145,7 +145,12 @@ export function registerGetPackageCosts(server: McpServer): void {
       const nextStep = `Call suggest_optimizations for ranked fixes, or explain_function on a top function from '${formatted[0].package}' to see where its CPU time goes.`;
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ packages: formatted, nextStep }, null, 2) }],
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ packages: formatted, nextStep }, null, 2),
+          },
+        ],
       };
     },
   );
