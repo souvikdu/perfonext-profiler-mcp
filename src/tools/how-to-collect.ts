@@ -71,7 +71,7 @@ export function registerHowToCollect(server: McpServer): void {
           .optional()
           .describe(
             'How the code under test runs. "next-server" (default) profiles a Next.js ' +
-            'production server; "script" profiles a standalone Node.js script.',
+              'production server; "script" profiles a standalone Node.js script.',
           ),
       },
     },

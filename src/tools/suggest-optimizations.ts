@@ -48,10 +48,7 @@ function getUniqueCallerIdentities(
  * High fan-in: function is called from many distinct callers.
  * Threshold: ≥ 3 distinct caller call frames (identified by functionName + url + line).
  */
-export function detectHighFanIn(
-  profile: ParsedProfile,
-  functionName: string,
-): PatternMatch | null {
+export function detectHighFanIn(profile: ParsedProfile, functionName: string): PatternMatch | null {
   const { keys, namesByKey } = getUniqueCallerIdentities(profile, functionName);
   if (keys.size < 3) return null;
 
@@ -71,10 +68,7 @@ export function detectHighFanIn(
  * Recursion: any node for this function has a descendant that is also this function.
  * Uses an iterative DFS to avoid stack overflow on deep profiles.
  */
-export function detectRecursion(
-  profile: ParsedProfile,
-  functionName: string,
-): PatternMatch | null {
+export function detectRecursion(profile: ParsedProfile, functionName: string): PatternMatch | null {
   for (const node of profile.nodes.values()) {
     if (node.callFrame.functionName !== functionName) continue;
 
@@ -107,10 +101,7 @@ export function detectRecursion(
  * Hot caller: one caller accounts for the dominant share of this function's total hits.
  * Threshold: single caller contributes ≥ 80% of all call-site occurrences.
  */
-export function detectHotCaller(
-  profile: ParsedProfile,
-  functionName: string,
-): PatternMatch | null {
+export function detectHotCaller(profile: ParsedProfile, functionName: string): PatternMatch | null {
   // Count occurrences per parent function name
   const callerCounts = new Map<string, number>();
   let total = 0;
@@ -147,30 +138,29 @@ export function detectHotCaller(
  * suggestion with the top user-code functions by total-time as likely
  * allocation sources.
  */
-function detectGcPressure(
-  profile: ParsedProfile,
-  functionName: string,
-): PatternMatch | null {
+function detectGcPressure(profile: ParsedProfile, functionName: string): PatternMatch | null {
   if (!/\(garbage collector\)|\bGC\b|Scavenge|MarkCompact|IncrementalMark/.test(functionName)) {
     return null;
   }
 
   // Find top named user-code functions by total-time as likely allocation sources
   const userNodes = [...profile.nodes.values()]
-    .filter(n =>
-      n.callFrame.url.startsWith('file://') &&
-      !n.callFrame.url.includes('node_modules') &&
-      n.callFrame.functionName &&
-      !n.callFrame.functionName.startsWith('('),
+    .filter(
+      (n) =>
+        n.callFrame.url.startsWith('file://') &&
+        !n.callFrame.url.includes('node_modules') &&
+        n.callFrame.functionName &&
+        !n.callFrame.functionName.startsWith('('),
     )
     .sort((a, b) => b.totalTime - a.totalTime)
     .slice(0, 3);
 
-  const allocatorHints = userNodes.length > 0
-    ? ` Likely allocation sources by CPU total-time: ${userNodes
-        .map(n => n.callFrame.functionName || '(anonymous)')
-        .join(', ')}.`
-    : '';
+  const allocatorHints =
+    userNodes.length > 0
+      ? ` Likely allocation sources by CPU total-time: ${userNodes
+          .map((n) => n.callFrame.functionName || '(anonymous)')
+          .join(', ')}.`
+      : '';
 
   return {
     pattern: 'gc-pressure',
@@ -245,7 +235,10 @@ function detectNamePattern(functionName: string, _hotspot: HotspotEntry): Patter
  * Percents are recomputed from the merged times to avoid summing ratios, which
  * can produce values > 100%.
  */
-export function deduplicateHotspots(hotspots: HotspotEntry[], totalDuration: number): HotspotEntry[] {
+export function deduplicateHotspots(
+  hotspots: HotspotEntry[],
+  totalDuration: number,
+): HotspotEntry[] {
   const seen = new Map<string, HotspotEntry>();
   for (const h of hotspots) {
     const key = `${h.functionName}::${h.url}`;
@@ -273,80 +266,92 @@ export function deduplicateHotspots(hotspots: HotspotEntry[], totalDuration: num
 // ─── Tool registration ────────────────────────────────────────────────────────
 
 export function registerSuggestOptimizations(server: McpServer) {
-  server.registerTool('suggest_optimizations', {
-    title: 'Suggest Optimizations',
-    description:
-      'Analyzes the profile and returns structured optimization suggestions for the hottest ' +
-      'functions. Detects high fan-in, recursion, dominant callers, V8-specific patterns, ' +
-      'and deduplicates functions split across multiple call sites.',
-    inputSchema: {
-      profileId: z.string().describe('Profile ID returned by load_profile'),
-      limit: z.number().min(1).max(20).default(5).describe('Number of functions to analyze (default: 5)'),
+  server.registerTool(
+    'suggest_optimizations',
+    {
+      title: 'Suggest Optimizations',
+      description:
+        'Analyzes the profile and returns structured optimization suggestions for the hottest ' +
+        'functions. Detects high fan-in, recursion, dominant callers, V8-specific patterns, ' +
+        'and deduplicates functions split across multiple call sites.',
+      inputSchema: {
+        profileId: z.string().describe('Profile ID returned by load_profile'),
+        limit: z
+          .number()
+          .min(1)
+          .max(20)
+          .default(5)
+          .describe('Number of functions to analyze (default: 5)'),
+      },
     },
-  }, async ({ profileId, limit }) => {
-    const profile = getProfile(profileId);
-    if (!profile) {
-      return {
-        content: [{ type: 'text' as const, text: `Error: Profile "${profileId}" not found.` }],
-        isError: true,
-      };
-    }
-
-    // Fetch more candidates before deduplication so limit is met after merging
-    const rawHotspots = getHotspots(profile, limit * 3);
-    const hotspots = deduplicateHotspots(rawHotspots, profile.totalDuration).slice(0, limit);
-
-    const suggestions: Suggestion[] = hotspots.map(h => {
-      const patterns: PatternMatch[] = [];
-
-      const gc = detectGcPressure(profile, h.functionName);
-      if (gc) patterns.push(gc);
-
-      const fanIn = detectHighFanIn(profile, h.functionName);
-      if (fanIn) patterns.push(fanIn);
-
-      const recursion = detectRecursion(profile, h.functionName);
-      if (recursion) patterns.push(recursion);
-
-      const hotCaller = detectHotCaller(profile, h.functionName);
-      if (hotCaller) patterns.push(hotCaller);
-
-      const namePattern = detectNamePattern(h.functionName, h);
-      if (namePattern) patterns.push(namePattern);
-
-      const orchestrator = detectOrchestrator(h);
-      if (orchestrator) patterns.push(orchestrator);
-
-      // Fallback when no specific pattern matched
-      if (patterns.length === 0) {
-        patterns.push({
-          pattern: 'cpu-bound',
-          detail: `Consumes ${h.selfPercent.toFixed(1)}% of CPU self-time`,
-          suggestion:
-            'Review for algorithmic complexity, unnecessary allocations, or repeated ' +
-            'computations that could be cached or moved outside hot loops.',
-        });
+    async ({ profileId, limit }) => {
+      const profile = getProfile(profileId);
+      if (!profile) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: Profile "${profileId}" not found.` }],
+          isError: true,
+        };
       }
 
+      // Fetch more candidates before deduplication so limit is met after merging
+      const rawHotspots = getHotspots(profile, limit * 3);
+      const hotspots = deduplicateHotspots(rawHotspots, profile.totalDuration).slice(0, limit);
+
+      const suggestions: Suggestion[] = hotspots.map((h) => {
+        const patterns: PatternMatch[] = [];
+
+        const gc = detectGcPressure(profile, h.functionName);
+        if (gc) patterns.push(gc);
+
+        const fanIn = detectHighFanIn(profile, h.functionName);
+        if (fanIn) patterns.push(fanIn);
+
+        const recursion = detectRecursion(profile, h.functionName);
+        if (recursion) patterns.push(recursion);
+
+        const hotCaller = detectHotCaller(profile, h.functionName);
+        if (hotCaller) patterns.push(hotCaller);
+
+        const namePattern = detectNamePattern(h.functionName, h);
+        if (namePattern) patterns.push(namePattern);
+
+        const orchestrator = detectOrchestrator(h);
+        if (orchestrator) patterns.push(orchestrator);
+
+        // Fallback when no specific pattern matched
+        if (patterns.length === 0) {
+          patterns.push({
+            pattern: 'cpu-bound',
+            detail: `Consumes ${h.selfPercent.toFixed(1)}% of CPU self-time`,
+            suggestion:
+              'Review for algorithmic complexity, unnecessary allocations, or repeated ' +
+              'computations that could be cached or moved outside hot loops.',
+          });
+        }
+
+        return {
+          function: h.functionName,
+          file: h.url,
+          line: h.lineNumber,
+          selfPercent: `${h.selfPercent.toFixed(1)}%`,
+          patterns,
+          topSuggestion: patterns[0].suggestion,
+        };
+      });
+
+      const nextStep =
+        suggestions.length > 0
+          ? `Call read_source_context with functionName '${suggestions[0].function}' to see the hottest lines before applying a fix.`
+          : 'No suggestions generated. Confirm the profile captured active work via get_profile_summary.';
+
       return {
-        function: h.functionName,
-        file: h.url,
-        line: h.lineNumber,
-        selfPercent: `${h.selfPercent.toFixed(1)}%`,
-        patterns,
-        topSuggestion: patterns[0].suggestion,
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ suggestions, nextStep }, null, 2),
+          },
+        ],
       };
-    });
-
-    const nextStep = suggestions.length > 0
-      ? `Call read_source_context with functionName '${suggestions[0].function}' to see the hottest lines before applying a fix.`
-      : 'No suggestions generated. Confirm the profile captured active work via get_profile_summary.';
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ suggestions, nextStep }, null, 2),
-      }],
-    };
-  });
+    },
+  );
 }

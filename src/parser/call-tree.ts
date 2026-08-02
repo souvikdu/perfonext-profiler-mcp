@@ -29,11 +29,16 @@ export interface HotspotEntry {
 
 export function getHotspots(profile: ParsedProfile, limit: number): HotspotEntry[] {
   const nodes = Array.from(profile.nodes.values())
-    .filter(n => n.selfTime > 0 && n.callFrame.functionName !== '(idle)' && n.callFrame.functionName !== '(root)')
+    .filter(
+      (n) =>
+        n.selfTime > 0 &&
+        n.callFrame.functionName !== '(idle)' &&
+        n.callFrame.functionName !== '(root)',
+    )
     .sort((a, b) => b.selfTime - a.selfTime)
     .slice(0, limit);
 
-  return nodes.map(n => ({
+  return nodes.map((n) => ({
     functionName: n.callFrame.functionName || '(anonymous)',
     url: n.callFrame.url,
     lineNumber: n.callFrame.lineNumber + 1, // Convert 0-based to 1-based
@@ -71,14 +76,24 @@ function buildTreeRecursive(
   minTimePercent = 0.1,
 ): CallTreeNode {
   const node = profile.nodes.get(nodeId)!;
-  const children = currentDepth < maxDepth
-    ? node.children
-        .map(cid => profile.nodes.get(cid)!)
-        .filter(c => c.totalTime > 0 && (c.totalTime / totalDuration) * 100 >= minTimePercent)
-        .sort((a, b) => b.totalTime - a.totalTime)
-        .slice(0, 20) // Cap to top 20 children per node
-        .map(c => buildTreeRecursive(profile, c.id, maxDepth, currentDepth + 1, totalDuration, minTimePercent))
-    : [];
+  const children =
+    currentDepth < maxDepth
+      ? node.children
+          .map((cid) => profile.nodes.get(cid)!)
+          .filter((c) => c.totalTime > 0 && (c.totalTime / totalDuration) * 100 >= minTimePercent)
+          .sort((a, b) => b.totalTime - a.totalTime)
+          .slice(0, 20) // Cap to top 20 children per node
+          .map((c) =>
+            buildTreeRecursive(
+              profile,
+              c.id,
+              maxDepth,
+              currentDepth + 1,
+              totalDuration,
+              minTimePercent,
+            ),
+          )
+      : [];
 
   return {
     functionName: node.callFrame.functionName || '(anonymous)',

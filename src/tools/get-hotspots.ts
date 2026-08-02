@@ -4,44 +4,62 @@ import { getProfile } from '../store.js';
 import { getHotspots } from '../parser/call-tree.js';
 
 export function registerGetHotspots(server: McpServer) {
-  server.registerTool('get_hotspots', {
-    title: 'Get Hotspots',
-    description: 'Returns the top N functions by self-time (CPU time spent directly in the function, not its callees). Use this to find performance bottlenecks.',
-    inputSchema: {
-      profileId: z.string().describe('Profile ID returned by load_profile'),
-      limit: z.number().min(1).max(100).default(10).describe('Number of hotspots to return (default: 10)'),
+  server.registerTool(
+    'get_hotspots',
+    {
+      title: 'Get Hotspots',
+      description:
+        'Returns the top N functions by self-time (CPU time spent directly in the function, not its callees). Use this to find performance bottlenecks.',
+      inputSchema: {
+        profileId: z.string().describe('Profile ID returned by load_profile'),
+        limit: z
+          .number()
+          .min(1)
+          .max(100)
+          .default(10)
+          .describe('Number of hotspots to return (default: 10)'),
+      },
     },
-  }, async ({ profileId, limit }) => {
-    const profile = getProfile(profileId);
-    if (!profile) {
+    async ({ profileId, limit }) => {
+      const profile = getProfile(profileId);
+      if (!profile) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error: Profile "${profileId}" not found. Use load_profile first.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const hotspots = getHotspots(profile, limit);
+      const formatted = hotspots.map((h, i) => ({
+        rank: i + 1,
+        function: h.functionName,
+        file: h.url,
+        line: h.lineNumber,
+        package: h.package ?? '(user code)',
+        selfTime: `${(h.selfTime / 1000).toFixed(1)}ms`,
+        selfPercent: `${h.selfPercent.toFixed(1)}%`,
+        totalTime: `${(h.totalTime / 1000).toFixed(1)}ms`,
+        totalPercent: `${h.totalPercent.toFixed(1)}%`,
+      }));
+
+      const nextStep =
+        formatted.length > 0
+          ? `Call explain_function with profileId '${profileId}' and functionName '${formatted[0].function}' to see its callers and callees, or suggest_optimizations for ranked fixes.`
+          : 'No hotspots found. Confirm the profile captured active work (see get_profile_summary).';
+
       return {
-        content: [{ type: 'text' as const, text: `Error: Profile "${profileId}" not found. Use load_profile first.` }],
-        isError: true,
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ hotspots: formatted, nextStep }, null, 2),
+          },
+        ],
       };
-    }
-
-    const hotspots = getHotspots(profile, limit);
-    const formatted = hotspots.map((h, i) => ({
-      rank: i + 1,
-      function: h.functionName,
-      file: h.url,
-      line: h.lineNumber,
-      package: h.package ?? '(user code)',
-      selfTime: `${(h.selfTime / 1000).toFixed(1)}ms`,
-      selfPercent: `${h.selfPercent.toFixed(1)}%`,
-      totalTime: `${(h.totalTime / 1000).toFixed(1)}ms`,
-      totalPercent: `${h.totalPercent.toFixed(1)}%`,
-    }));
-
-    const nextStep = formatted.length > 0
-      ? `Call explain_function with profileId '${profileId}' and functionName '${formatted[0].function}' to see its callers and callees, or suggest_optimizations for ranked fixes.`
-      : 'No hotspots found. Confirm the profile captured active work (see get_profile_summary).';
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ hotspots: formatted, nextStep }, null, 2),
-      }],
-    };
-  });
+    },
+  );
 }

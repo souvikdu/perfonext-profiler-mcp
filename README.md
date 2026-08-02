@@ -1,8 +1,49 @@
 # perfonext-profiler-mcp
 
-[![npm](https://img.shields.io/npm/v/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+> Analyze V8 and Chrome CPU profiles to find hotspots in Next.js servers and scripts.
 
-`perfonext-profiler-mcp` is an MCP server for loading and analyzing V8 and Chrome CPU profiles. It gives GitHub Copilot and other MCP clients structured performance data they can reason over instead of forcing the model to ingest multi-megabyte profile dumps.
+[![npm](https://img.shields.io/npm/v/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+[![npm downloads](https://img.shields.io/npm/dt/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+[![license](https://img.shields.io/npm/l/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+
+`perfonext-profiler-mcp` is a Model Context Protocol (MCP) server that gives GitHub Copilot, Claude Desktop,
+Claude Code, and other MCP clients structured CPU profiling data for Next.js performance work. It loads V8 and
+Chrome CPU profiles and turns them into hotspot rankings, per-package costs, and source-annotated hot lines —
+evidence agents can reason over instead of ingesting multi-megabyte profile dumps.
+
+## Quick Start
+
+Run directly with `npx`:
+
+```bash
+npx -y @perfonext/profiler-mcp
+```
+
+Or install globally:
+
+```bash
+npm install -g @perfonext/profiler-mcp
+```
+
+The executable command remains `perfonext-profiler-mcp` after installation.
+
+Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration file):
+
+```json
+{
+  "servers": {
+    "perfonext-profiler": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@perfonext/profiler-mcp"]
+    }
+  }
+}
+```
+
+Then reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears. For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
+
+Then ask Copilot: _"How do I capture a CPU profile of my Next.js server?"_
 
 ## What It Does
 
@@ -17,19 +58,35 @@
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `how_to_collect` | Return a ready-to-run command and step-by-step recipe for capturing a `.cpuprofile`, then loading it. Use this when you don't have a profile yet |
-| `load_profile` | Parse and load a `.cpuprofile` file or Chrome trace export from disk |
-| `get_hotspots` | Find top functions by self-time. Each entry includes a `package` field identifying the npm package or `(user code)` |
-| `explain_function` | Explain a function's timing, callers, and callees. Pass `includeSource: true` to attach annotated source lines |
-| `read_source_context` | Read the actual source file for a hot function and annotate each line with tick counts from `positionTicks` |
-| `get_package_costs` | Aggregate CPU self-time by npm package — shows which dependencies are most expensive |
-| `compare_profiles` | Compare two profiles and highlight regressions |
+| Tool                    | Description                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `how_to_collect`        | Return a ready-to-run command and step-by-step recipe for capturing a `.cpuprofile`, then loading it. Use this when you don't have a profile yet                                                                   |
+| `load_profile`          | Parse and load a `.cpuprofile` file or Chrome trace export from disk                                                                                                                                               |
+| `get_hotspots`          | Find top functions by self-time. Each entry includes a `package` field identifying the npm package or `(user code)`                                                                                                |
+| `explain_function`      | Explain a function's timing, callers, and callees. Pass `includeSource: true` to attach annotated source lines                                                                                                     |
+| `read_source_context`   | Read the actual source file for a hot function and annotate each line with tick counts from `positionTicks`                                                                                                        |
+| `get_package_costs`     | Aggregate CPU self-time by npm package — shows which dependencies are most expensive                                                                                                                               |
+| `compare_profiles`      | Compare two profiles and highlight regressions                                                                                                                                                                     |
 | `suggest_optimizations` | Generate structured, multi-pattern optimization suggestions for hot functions. Detects high fan-in, recursion, dominant callers, and V8-specific patterns. Deduplicates functions split across multiple call sites |
-| `get_profile_summary` | Summarize one profile or list all loaded profiles |
+| `get_profile_summary`   | Summarize one profile or list all loaded profiles                                                                                                                                                                  |
 
 Every tool result carries a `nextStep` breadcrumb pointing at the natural follow-up call, so an MCP client can walk the collect → analyze → fix loop without guessing.
+
+## Example Copilot Prompts
+
+- "How do I capture a CPU profile of my Next.js server?"
+- "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
+- "Which npm packages are consuming the most CPU in this profile?"
+- "Explain why `processData` is expensive in the loaded profile."
+- "Show me the actual source lines for `processData` and mark which lines are hottest."
+- "Explain `transformResult` and include the annotated source code."
+- "Compare my baseline and current CPU profiles and tell me what got slower."
+- "Suggest optimizations for the top three hotspots."
+
+## Deep Tool Reference
+
+<details>
+<summary>Per-tool input/output schemas and manual profile capture</summary>
 
 ### `how_to_collect` details
 
@@ -97,16 +154,16 @@ Only files inside the current working directory can be read. `file://` URLs and 
 
 Patterns detected (multiple can fire for the same function):
 
-| Pattern | Trigger |
-|---|---|
-| `gc-pressure` | Function name matches GC/Scavenge/MarkCompact |
-| `json-serialization` | `JSON.parse` / `JSON.stringify` |
-| `regex-cost` | RegExp / `exec` / `test` calls |
-| `v8-deopt` | Compile / Recompile / Optimize / Deoptimize |
-| `high-fan-in` | ≥ 3 distinct parent call sites |
-| `recursion` | Function appears in its own descendant sub-tree |
-| `hot-caller` | One caller accounts for ≥ 80% of call-site occurrences |
-| `cpu-bound` | Fallback when no other pattern matches |
+| Pattern              | Trigger                                                |
+| -------------------- | ------------------------------------------------------ |
+| `gc-pressure`        | Function name matches GC/Scavenge/MarkCompact          |
+| `json-serialization` | `JSON.parse` / `JSON.stringify`                        |
+| `regex-cost`         | RegExp / `exec` / `test` calls                         |
+| `v8-deopt`           | Compile / Recompile / Optimize / Deoptimize            |
+| `high-fan-in`        | ≥ 3 distinct parent call sites                         |
+| `recursion`          | Function appears in its own descendant sub-tree        |
+| `hot-caller`         | One caller accounts for ≥ 80% of call-site occurrences |
+| `cpu-bound`          | Fallback when no other pattern matches                 |
 
 Functions that appear at multiple call sites are automatically merged before ranking so the same logical function is only reported once.
 
@@ -132,61 +189,7 @@ Functions that appear at multiple call sites are automatically merged before ran
 
 Scoped packages (`@babel/core`, `@next/env`, etc.) are handled correctly. User code and native builtins (no `node_modules` in the path) are excluded.
 
-## Install
-
-Run directly with `npx`:
-
-```bash
-npx -y @perfonext/profiler-mcp
-```
-
-Or install globally:
-
-```bash
-npm install -g @perfonext/profiler-mcp
-```
-
-The executable command remains `perfonext-profiler-mcp` after installation.
-
-## MCP Configuration
-
-Add this server to VS Code `settings.json`:
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "perfonext-profiler": {
-        "command": "npx",
-        "args": ["-y", "@perfonext/profiler-mcp"]
-      }
-    }
-  }
-}
-```
-
-## Example Copilot Prompts
-
-- "How do I capture a CPU profile of my Next.js server?"
-- "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
-- "Which npm packages are consuming the most CPU in this profile?"
-- "Explain why `processData` is expensive in the loaded profile."
-- "Show me the actual source lines for `processData` and mark which lines are hottest."
-- "Explain `transformResult` and include the annotated source code."
-- "Compare my baseline and current CPU profiles and tell me what got slower."
-- "Suggest optimizations for the top three hotspots."
-
-## Development
-
-```bash
-npm install
-npm run build
-npm test
-```
-
-The repository already includes sample fixtures under `tests/fixtures/` for local validation.
-
-## Generating a CPU Profile
+### Generating a CPU Profile
 
 Ask Copilot to call `how_to_collect` for a ready-to-run recipe, or generate one manually:
 
@@ -208,6 +211,23 @@ Chrome DevTools:
 1. Open DevTools and go to the Performance tab.
 2. Record the scenario you want to inspect.
 3. Stop recording and save the result as a `.cpuprofile` export.
+
+</details>
+
+## Related Perfonext Tools
+
+- [perfonext-render-mcp](https://github.com/souvikdu/perfonext-render-mcp) — React render analysis for Next.js apps
+- [perfonext-build-mcp](https://github.com/souvikdu/perfonext-build-mcp) — Next.js bundle/build analysis
+
+## Development
+
+```bash
+npm install
+npm run build
+npm test
+```
+
+The repository already includes sample fixtures under `tests/fixtures/` for local validation.
 
 ## License
 
