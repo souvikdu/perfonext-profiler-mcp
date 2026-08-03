@@ -4,6 +4,12 @@ All notable changes to `@perfonext/profiler-mcp` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Publish workflow migrated to npm trusted publishing (OIDC): `npm publish --provenance` with `id-token: write`, removing the long-lived `NPM_TOKEN` bypass-2FA granular access token.
+
 ## [0.5.1] - 2026-08-02
 
 ### Added
