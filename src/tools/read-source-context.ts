@@ -125,7 +125,7 @@ export async function readSourceContext(
 
   // Size the window from the actual tick extent, not just a fixed radius around the
   // declaration line — a hot function's real work is often many lines past its `function` line.
-  let startLine = Math.max(1, Math.min(funcLine, minTickLine) - contextLines);
+  const startLine = Math.max(1, Math.min(funcLine, minTickLine) - contextLines);
   let endLine = Math.min(allLines.length, Math.max(funcLine, maxTickLine) + contextLines);
   let cappedByMaxWindow = false;
   if (endLine - startLine + 1 > MAX_WINDOW_LINES) {
