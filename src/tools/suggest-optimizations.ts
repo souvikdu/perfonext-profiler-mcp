@@ -19,6 +19,51 @@ export interface PatternMatch {
   suggestion: string;
 }
 
+/**
+ * A function call frame. Identity for matching purposes is `functionName` + `url`
+ * only (see identityKey below) — the same as `deduplicateHotspots` merges them.
+ * `lineNumber` is carried for display but deliberately excluded from the key: a
+ * deduplicated `HotspotEntry` keeps only one representative line, so keying on it
+ * here would silently fail to match other call-tree nodes for the same function.
+ */
+export interface FunctionIdentity {
+  functionName: string;
+  url: string;
+  lineNumber: number;
+}
+
+/**
+ * Recursive frames must account for at least this share of a function's CPU
+ * self-time before recursion is reported. V8 sampling and inlining routinely
+ * produce sub-millisecond self-edges in the call tree for non-recursive
+ * functions, so a structural cycle alone is not evidence of recursion.
+ */
+const RECURSION_MIN_SELF_TIME_SHARE = 0.05;
+
+/** Above this self-time share a function always carries explicit CPU-cost evidence. */
+const CPU_BOUND_MIN_SELF_PERCENT = 5;
+
+/**
+ * Ordering for `topSuggestion`. Patterns backed by direct evidence outrank
+ * advisory ones, so a weak `hot-caller` can never displace the CPU-cost finding
+ * on an expensive function.
+ */
+const PATTERN_PRIORITY: Record<string, number> = {
+  'gc-pressure': 100,
+  'v8-deopt': 90,
+  'json-serialization': 80,
+  'regex-cost': 80,
+  recursion: 70,
+  'cpu-bound': 60,
+  'high-fan-in': 40,
+  'hot-caller': 30,
+  orchestrator: 20,
+};
+
+function identityKey(frame: FunctionIdentity): string {
+  return `${frame.functionName}::${frame.url}`;
+}
+
 // ─── Pattern detectors ────────────────────────────────────────────────────────
 
 /**
@@ -65,36 +110,69 @@ export function detectHighFanIn(profile: ParsedProfile, functionName: string): P
 }
 
 /**
- * Recursion: any node for this function has a descendant that is also this function.
+ * Recursion: the function re-enters itself along a single root-to-leaf path, and
+ * those re-entrant frames carry a material share of its CPU self-time.
+ *
+ * Both conditions matter. Searching a node's whole descendant subtree (rather
+ * than its own ancestor path) flags any shared utility that happens to appear
+ * deeper in an unrelated branch, and matching on function name alone conflates
+ * same-named functions across modules. The self-time share then discards
+ * structural cycles that carry no real cost — the shape V8 produces for inlined
+ * or mis-attributed samples.
+ *
  * Uses an iterative DFS to avoid stack overflow on deep profiles.
  */
-export function detectRecursion(profile: ParsedProfile, functionName: string): PatternMatch | null {
-  for (const node of profile.nodes.values()) {
-    if (node.callFrame.functionName !== functionName) continue;
+export function detectRecursion(
+  profile: ParsedProfile,
+  target: FunctionIdentity,
+): PatternMatch | null {
+  const targetKey = identityKey(target);
 
-    // DFS from this node's children
-    const stack = [...node.children];
-    const visited = new Set<number>();
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (visited.has(id)) continue;
-      visited.add(id);
-      const child = profile.nodes.get(id);
-      if (!child) continue;
-      if (child.callFrame.functionName === functionName) {
-        return {
-          pattern: 'recursion',
-          detail: `Function calls itself (directly or indirectly) in the call tree`,
-          suggestion:
-            'Recursive functions can cause stack pressure and prevent V8 inlining. ' +
-            'Consider converting tail recursion to iteration, adding a depth limit, ' +
-            'or memoizing sub-problems if inputs repeat.',
-        };
+  let selfTimeTotal = 0;
+  let selfTimeRecursive = 0;
+  let maxDepth = 0;
+
+  // Each frame carries how many times the target already appears on its path.
+  const stack: Array<{ id: number; depth: number }> = [{ id: profile.root, depth: 0 }];
+  const visited = new Set<number>();
+
+  while (stack.length > 0) {
+    const { id, depth } = stack.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    const node = profile.nodes.get(id);
+    if (!node) continue;
+
+    const isTarget = identityKey(node.callFrame) === targetKey;
+    const nextDepth = isTarget ? depth + 1 : depth;
+
+    if (isTarget) {
+      selfTimeTotal += node.selfTime;
+      if (nextDepth > 1) {
+        selfTimeRecursive += node.selfTime;
+        if (nextDepth > maxDepth) maxDepth = nextDepth;
       }
-      stack.push(...child.children);
     }
+
+    for (const childId of node.children) stack.push({ id: childId, depth: nextDepth });
   }
-  return null;
+
+  if (selfTimeTotal <= 0 || selfTimeRecursive <= 0) return null;
+
+  const share = selfTimeRecursive / selfTimeTotal;
+  if (share < RECURSION_MIN_SELF_TIME_SHARE) return null;
+
+  return {
+    pattern: 'recursion',
+    detail:
+      `Re-enters itself (directly or indirectly) up to ${maxDepth} levels deep; ` +
+      `recursive frames account for ${(share * 100).toFixed(1)}% of its CPU self-time`,
+    suggestion:
+      'Recursive functions can cause stack pressure and prevent V8 inlining. ' +
+      'Consider converting tail recursion to iteration, adding a depth limit, ' +
+      'or memoizing sub-problems if inputs repeat.',
+  };
 }
 
 /**
@@ -263,6 +341,59 @@ export function deduplicateHotspots(
   return result.sort((a, b) => b.selfTime - a.selfTime);
 }
 
+// ─── Suggestion assembly ──────────────────────────────────────────────────────
+
+/**
+ * Build the pattern list for one hotspot.
+ *
+ * `cpu-bound` is emitted whenever the function is expensive enough to matter,
+ * not only as a fallback: an expensive function that also matches an advisory
+ * pattern still needs its CPU cost stated, otherwise the most important finding
+ * in the profile is the one that goes unreported.
+ */
+export function buildSuggestion(profile: ParsedProfile, h: HotspotEntry): Suggestion {
+  const patterns: PatternMatch[] = [];
+
+  const gc = detectGcPressure(profile, h.functionName);
+  if (gc) patterns.push(gc);
+
+  const fanIn = detectHighFanIn(profile, h.functionName);
+  if (fanIn) patterns.push(fanIn);
+
+  const recursion = detectRecursion(profile, h);
+  if (recursion) patterns.push(recursion);
+
+  const hotCaller = detectHotCaller(profile, h.functionName);
+  if (hotCaller) patterns.push(hotCaller);
+
+  const namePattern = detectNamePattern(h.functionName, h);
+  if (namePattern) patterns.push(namePattern);
+
+  const orchestrator = detectOrchestrator(h);
+  if (orchestrator) patterns.push(orchestrator);
+
+  if (h.selfPercent >= CPU_BOUND_MIN_SELF_PERCENT || patterns.length === 0) {
+    patterns.push({
+      pattern: 'cpu-bound',
+      detail: `Consumes ${h.selfPercent.toFixed(1)}% of CPU self-time`,
+      suggestion:
+        'Review for algorithmic complexity, unnecessary allocations, or repeated ' +
+        'computations that could be cached or moved outside hot loops.',
+    });
+  }
+
+  patterns.sort((a, b) => (PATTERN_PRIORITY[b.pattern] ?? 0) - (PATTERN_PRIORITY[a.pattern] ?? 0));
+
+  return {
+    function: h.functionName,
+    file: h.url,
+    line: h.lineNumber,
+    selfPercent: `${h.selfPercent.toFixed(1)}%`,
+    patterns,
+    topSuggestion: patterns[0].suggestion,
+  };
+}
+
 // ─── Tool registration ────────────────────────────────────────────────────────
 
 export function registerSuggestOptimizations(server: McpServer) {
@@ -273,7 +404,8 @@ export function registerSuggestOptimizations(server: McpServer) {
       description:
         'Analyzes the profile and returns structured optimization suggestions for the hottest ' +
         'functions. Detects high fan-in, recursion, dominant callers, V8-specific patterns, ' +
-        'and deduplicates functions split across multiple call sites.',
+        'always reports CPU self-time cost for expensive functions, and deduplicates functions ' +
+        'split across multiple call sites.',
       inputSchema: {
         profileId: z.string().describe('Profile ID returned by load_profile'),
         limit: z
@@ -297,47 +429,7 @@ export function registerSuggestOptimizations(server: McpServer) {
       const rawHotspots = getHotspots(profile, limit * 3);
       const hotspots = deduplicateHotspots(rawHotspots, profile.totalDuration).slice(0, limit);
 
-      const suggestions: Suggestion[] = hotspots.map((h) => {
-        const patterns: PatternMatch[] = [];
-
-        const gc = detectGcPressure(profile, h.functionName);
-        if (gc) patterns.push(gc);
-
-        const fanIn = detectHighFanIn(profile, h.functionName);
-        if (fanIn) patterns.push(fanIn);
-
-        const recursion = detectRecursion(profile, h.functionName);
-        if (recursion) patterns.push(recursion);
-
-        const hotCaller = detectHotCaller(profile, h.functionName);
-        if (hotCaller) patterns.push(hotCaller);
-
-        const namePattern = detectNamePattern(h.functionName, h);
-        if (namePattern) patterns.push(namePattern);
-
-        const orchestrator = detectOrchestrator(h);
-        if (orchestrator) patterns.push(orchestrator);
-
-        // Fallback when no specific pattern matched
-        if (patterns.length === 0) {
-          patterns.push({
-            pattern: 'cpu-bound',
-            detail: `Consumes ${h.selfPercent.toFixed(1)}% of CPU self-time`,
-            suggestion:
-              'Review for algorithmic complexity, unnecessary allocations, or repeated ' +
-              'computations that could be cached or moved outside hot loops.',
-          });
-        }
-
-        return {
-          function: h.functionName,
-          file: h.url,
-          line: h.lineNumber,
-          selfPercent: `${h.selfPercent.toFixed(1)}%`,
-          patterns,
-          topSuggestion: patterns[0].suggestion,
-        };
-      });
+      const suggestions: Suggestion[] = hotspots.map((h) => buildSuggestion(profile, h));
 
       const nextStep =
         suggestions.length > 0

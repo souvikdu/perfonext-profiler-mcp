@@ -122,6 +122,13 @@ Every tool result carries a `nextStep` breadcrumb pointing at the natural follow
 }
 ```
 
+The returned window is sized to cover the function's actual hot lines, not just a fixed radius
+around its declaration — a function's real bottleneck is often well past its `function` line.
+`contextLines` (default 10) sets the minimum padding around both the declaration and the hot
+lines; if any ticks still fall outside the returned window, the top-level result includes
+`hiddenTicks` (a count) and a `warning` telling you to retry with a larger `contextLines`.
+`explain_function` also accepts `contextLines` when called with `includeSource: true`.
+
 Only files inside the current working directory can be read. `file://` URLs and absolute paths are both handled; `http://`, `node:` builtins, and paths outside the project root are rejected.
 
 ### `suggest_optimizations` details

@@ -20,9 +20,18 @@ export function registerExplainFunction(server: McpServer) {
           .describe(
             'When true, include annotated source code lines with per-line tick counts (default: false)',
           ),
+        contextLines: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe(
+            'Only used with includeSource: minimum lines of padding around the declaration and hot lines (default: 10)',
+          ),
       },
     },
-    async ({ profileId, functionName, includeSource = false }) => {
+    async ({ profileId, functionName, includeSource = false, contextLines = 10 }) => {
       const profile = getProfile(profileId);
       if (!profile) {
         return {
@@ -85,7 +94,7 @@ export function registerExplainFunction(server: McpServer) {
 
       if (includeSource) {
         try {
-          output.sourceContext = await readSourceContext(profile, functionName, 10);
+          output.sourceContext = await readSourceContext(profile, functionName, contextLines);
         } catch (err) {
           output.sourceContext = { error: (err as Error).message };
         }
