@@ -4,8 +4,6 @@ All notable changes to `@perfonext/profiler-mcp` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
 ## [0.6.0] - 2026-08-09
 
 ### Fixed
@@ -20,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Publish workflow migrated to npm trusted publishing (OIDC): `npm publish --provenance` with `id-token: write`, removing the long-lived `NPM_TOKEN` bypass-2FA granular access token.
+- Publish workflow migrated to npm trusted publishing (OIDC): `npm publish --provenance` with `id-token: write`, removing the long-lived `NPM_TOKEN` bypass-2FA granular access token. The workflow also upgrades npm to latest before `npm ci`/`npm publish` — npm 10.x (bundled with Node 22) can sign provenance via sigstore but cannot perform the OIDC exchange to authenticate to the registry, so publishes ran anonymously and the registry returned a misleading 404.
 - `detectRecursion` is now called with a `FunctionIdentity` (`{ functionName, url, lineNumber }`) instead of a bare function name. This is an internal export, not part of the MCP tool surface.
 
 ### Added
