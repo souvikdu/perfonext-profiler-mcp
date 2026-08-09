@@ -8,9 +8,12 @@ import {
   detectHighFanIn,
   detectRecursion,
   detectHotCaller,
+  buildSuggestion,
 } from '../src/tools/suggest-optimizations.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+const TEST_URL = 'file:///app/src/index.js';
 
 function makeNode(
   id: number,
@@ -19,14 +22,17 @@ function makeNode(
   children: number[],
   selfTime = 10,
   totalTime = 20,
+  // V8 records the declaration line, so every node for one function shares it.
+  lineNumber = id,
+  url = TEST_URL,
 ): AggregatedNode {
   return {
     id,
     callFrame: {
       functionName,
       scriptId: '1',
-      url: 'file:///app/src/index.js',
-      lineNumber: id,
+      url,
+      lineNumber,
       columnNumber: 0,
     },
     hitCount: 1,
@@ -128,29 +134,122 @@ describe('suggest_optimizations – fan-in', () => {
 // ─── Recursion detection ─────────────────────────────────────────────────────
 
 describe('suggest_optimizations – recursion', () => {
+  const RECURSE = { functionName: 'recurse', url: TEST_URL, lineNumber: 42 };
+  const FN_A = { functionName: 'fnA', url: TEST_URL, lineNumber: 42 };
+
   it('detects direct recursion (fn calls itself)', () => {
     const nodes: AggregatedNode[] = [
       makeNode(1, '(root)', null, [2]),
-      makeNode(2, 'recurse', 1, [3], 10, 100),
-      makeNode(3, 'recurse', 2, [], 90, 90),
+      makeNode(2, 'recurse', 1, [3], 10, 100, 42),
+      makeNode(3, 'recurse', 2, [], 90, 90, 42),
     ];
     const profile = makeProfile(nodes);
-    const result = detectRecursion(profile, 'recurse');
+    const result = detectRecursion(profile, RECURSE);
     expect(result).not.toBeNull();
     expect(result!.pattern).toBe('recursion');
+    expect(result!.detail).toContain('2 levels deep');
   });
 
   it('detects indirect recursion (A → B → A)', () => {
     const nodes: AggregatedNode[] = [
       makeNode(1, '(root)', null, [2]),
-      makeNode(2, 'fnA', 1, [3], 5, 100),
+      makeNode(2, 'fnA', 1, [3], 5, 100, 42),
       makeNode(3, 'fnB', 2, [4], 5, 90),
-      makeNode(4, 'fnA', 3, [], 80, 80),
+      makeNode(4, 'fnA', 3, [], 80, 80, 42),
     ];
     const profile = makeProfile(nodes);
-    const result = detectRecursion(profile, 'fnA');
+    const result = detectRecursion(profile, FN_A);
     expect(result).not.toBeNull();
     expect(result!.pattern).toBe('recursion');
+  });
+
+  it('does NOT flag a structural self-edge that carries negligible self-time', () => {
+    // The shape V8 emits for inlined/mis-attributed samples: a real `fn -> fn`
+    // edge worth 1 tick against 1000 ticks of non-recursive work.
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2]),
+      makeNode(2, 'caller', 1, [3], 0, 1001),
+      makeNode(3, 'fn', 2, [4], 1000, 1001, 7),
+      makeNode(4, 'fn', 3, [], 1, 1, 7),
+    ];
+    const profile = makeProfile(nodes);
+    expect(
+      detectRecursion(profile, { functionName: 'fn', url: TEST_URL, lineNumber: 7 }),
+    ).toBeNull();
+  });
+
+  it('does NOT flag a same-named function defined in a different file', () => {
+    const other = 'file:///app/src/other.js';
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2]),
+      makeNode(2, 'format', 1, [3], 50, 100, 7),
+      makeNode(3, 'format', 2, [], 50, 50, 7, other),
+    ];
+    const profile = makeProfile(nodes);
+    expect(
+      detectRecursion(profile, { functionName: 'format', url: TEST_URL, lineNumber: 7 }),
+    ).toBeNull();
+  });
+
+  it('does NOT flag a shared utility that merely reappears in an unrelated branch', () => {
+    // `util` is called twice from sibling branches; neither call is nested in
+    // the other, so this is fan-out, not recursion.
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2, 4]),
+      makeNode(2, 'branchA', 1, [3], 0, 100),
+      makeNode(3, 'util', 2, [], 100, 100, 9),
+      makeNode(4, 'branchB', 1, [5], 0, 100),
+      makeNode(5, 'util', 4, [], 100, 100, 9),
+    ];
+    const profile = makeProfile(nodes);
+    expect(
+      detectRecursion(profile, { functionName: 'util', url: TEST_URL, lineNumber: 9 }),
+    ).toBeNull();
+  });
+});
+
+// ─── CPU-cost evidence ────────────────────────────────────────────────────────
+
+describe('suggest_optimizations – cpu-bound evidence', () => {
+  // hotFn is called only from oneCaller, so hot-caller fires; its CPU cost must
+  // still be reported, and must lead.
+  const nodes: AggregatedNode[] = [
+    makeNode(1, '(root)', null, [2]),
+    makeNode(2, 'oneCaller', 1, [3], 0, 300_000),
+    makeNode(3, 'hotFn', 2, [], 300_000, 300_000, 11),
+  ];
+
+  it('reports cpu-bound alongside an advisory pattern on an expensive function', async () => {
+    const profile = makeProfile(nodes);
+    const { getHotspots } = await import('../src/parser/call-tree.js');
+    const hotspot = getHotspots(profile, 10).find((h) => h.functionName === 'hotFn')!;
+
+    const suggestion = buildSuggestion(profile, hotspot);
+    const kinds = suggestion.patterns.map((p) => p.pattern);
+
+    expect(kinds).toContain('hot-caller');
+    expect(kinds).toContain('cpu-bound');
+    expect(suggestion.patterns[0].pattern).toBe('cpu-bound');
+    expect(suggestion.topSuggestion).toBe(
+      suggestion.patterns.find((p) => p.pattern === 'cpu-bound')!.suggestion,
+    );
+  });
+
+  it('still emits cpu-bound as a fallback when nothing else matches', async () => {
+    // Two callers: too few for fan-in, too even for hot-caller.
+    const cheap: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2, 4]),
+      makeNode(2, 'callerA', 1, [3], 0, 1),
+      makeNode(3, 'a', 2, [], 1, 1, 5),
+      makeNode(4, 'callerB', 1, [5], 0, 1),
+      makeNode(5, 'a', 4, [], 1, 1, 5),
+    ];
+    const profile = makeProfile(cheap);
+    const { getHotspots } = await import('../src/parser/call-tree.js');
+    const hotspot = getHotspots(profile, 10).find((h) => h.functionName === 'a')!;
+
+    const suggestion = buildSuggestion(profile, hotspot);
+    expect(suggestion.patterns.map((p) => p.pattern)).toEqual(['cpu-bound']);
   });
 });
 

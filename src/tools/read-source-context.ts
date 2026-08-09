@@ -20,7 +20,13 @@ export interface SourceContextResult {
   endLine: number;
   lines: SourceLine[];
   totalTicks: number;
+  visibleTicks: number;
+  hiddenTicks: number;
+  warning?: string;
 }
+
+// Hard cap on window size so a single misplaced tick can't return the whole file.
+const MAX_WINDOW_LINES = 200;
 
 /**
  * Convert a file:// URL or absolute path to a filesystem path.
@@ -90,10 +96,14 @@ export async function readSourceContext(
   const content = await readFile(filePath, 'utf-8');
   const allLines = content.split('\n');
 
+  // Only aggregate ticks from nodes in the same file — same function name in a
+  // different file must not pollute this function's tick totals or window.
+  const sameFileMatches = matches.filter((n) => n.callFrame.url === url);
+
   // Aggregate per-line ticks across all matching nodes.
   // positionTicks line numbers are 1-based in the V8 format.
   const tickMap = new Map<number, number>();
-  for (const node of matches) {
+  for (const node of sameFileMatches) {
     for (const pt of node.positionTicks ?? []) {
       tickMap.set(pt.line, (tickMap.get(pt.line) ?? 0) + pt.ticks);
     }
@@ -101,11 +111,27 @@ export async function readSourceContext(
 
   // callFrame.lineNumber is 0-based; convert to 1-based for display / slicing
   const funcLine = rawLine + 1;
-  const startLine = Math.max(1, funcLine - contextLines);
-  const endLine = Math.min(allLines.length, funcLine + contextLines);
+  // A loop avoids Math.min/max(...array), which can throw on very large spreads.
+  let minTickLine = funcLine;
+  let maxTickLine = funcLine;
+  let maxTicks = 0;
+  let totalTicks = 0;
+  for (const [line, ticks] of tickMap) {
+    if (line < minTickLine) minTickLine = line;
+    if (line > maxTickLine) maxTickLine = line;
+    if (ticks > maxTicks) maxTicks = ticks;
+    totalTicks += ticks;
+  }
 
-  const totalTicks = Array.from(tickMap.values()).reduce((a, b) => a + b, 0);
-  const maxTicks = tickMap.size > 0 ? Math.max(...tickMap.values()) : 0;
+  // Size the window from the actual tick extent, not just a fixed radius around the
+  // declaration line — a hot function's real work is often many lines past its `function` line.
+  let startLine = Math.max(1, Math.min(funcLine, minTickLine) - contextLines);
+  let endLine = Math.min(allLines.length, Math.max(funcLine, maxTickLine) + contextLines);
+  let cappedByMaxWindow = false;
+  if (endLine - startLine + 1 > MAX_WINDOW_LINES) {
+    endLine = Math.min(allLines.length, startLine + MAX_WINDOW_LINES - 1);
+    cappedByMaxWindow = true;
+  }
 
   const lines: SourceLine[] = [];
   for (let ln = startLine; ln <= endLine; ln++) {
@@ -119,6 +145,16 @@ export async function readSourceContext(
     });
   }
 
+  const visibleTicks = lines.reduce((sum, l) => sum + l.ticks, 0);
+  const hiddenTicks = totalTicks - visibleTicks;
+
+  let warning: string | undefined;
+  if (hiddenTicks > 0) {
+    warning = cappedByMaxWindow
+      ? `${hiddenTicks} of ${totalTicks} ticks fall outside this ${startLine}-${endLine} window because the hot lines span more than ${MAX_WINDOW_LINES} lines; a larger contextLines will not help.`
+      : `${hiddenTicks} of ${totalTicks} ticks fall outside this ${startLine}-${endLine} window. Call again with a larger contextLines to see them.`;
+  }
+
   return {
     functionName,
     file: filePath,
@@ -127,6 +163,9 @@ export async function readSourceContext(
     endLine,
     lines,
     totalTicks,
+    visibleTicks,
+    hiddenTicks,
+    warning,
   };
 }
 
@@ -137,8 +176,10 @@ export function registerReadSourceContext(server: McpServer): void {
       title: 'Read Source Context',
       description:
         'Read the actual source code for a hot function and annotate each line with ' +
-        'sampled tick counts from positionTicks. Helps identify which specific lines ' +
-        'within a function are the bottleneck. Only reads files within the project root.',
+        'sampled tick counts from positionTicks. The returned window is sized to cover the ' +
+        "function's actual hot lines, not just the area around its declaration; if any ticks " +
+        'still fall outside it, a `warning` field reports how many and suggests a larger ' +
+        'contextLines. Only reads files within the project root.',
       inputSchema: {
         profileId: z.string().describe('Profile ID returned by load_profile'),
         functionName: z.string().describe('Exact function name to look up'),
@@ -148,7 +189,9 @@ export function registerReadSourceContext(server: McpServer): void {
           .min(1)
           .max(50)
           .optional()
-          .describe('Lines of context before and after the function definition (default: 10)'),
+          .describe(
+            'Minimum lines of padding around the function declaration and its hot lines (default: 10)',
+          ),
       },
     },
     async ({ profileId, functionName, contextLines = 10 }) => {

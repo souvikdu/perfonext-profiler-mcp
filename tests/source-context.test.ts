@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { parseCpuProfile } from '../src/parser/cpuprofile.js';
 import { readSourceContext, fileUrlToPath, isWithinCwd } from '../src/tools/read-source-context.js';
 
@@ -10,7 +11,11 @@ const fixtureSourcePath = resolve(import.meta.dirname, 'fixtures/sample-source.j
  * Build a minimal cpuprofile JSON string whose hot node points at
  * `fixtureSourcePath` and includes positionTicks.
  */
-function buildProfileJson(lineNumber: number, positionTicks: { line: number; ticks: number }[]) {
+function buildProfileJson(
+  lineNumber: number,
+  positionTicks: { line: number; ticks: number }[],
+  functionName = 'heavyComputation',
+) {
   return JSON.stringify({
     nodes: [
       {
@@ -28,7 +33,7 @@ function buildProfileJson(lineNumber: number, positionTicks: { line: number; tic
       {
         id: 2,
         callFrame: {
-          functionName: 'heavyComputation',
+          functionName,
           scriptId: '1',
           url: `file://${fixtureSourcePath}`,
           lineNumber, // 0-based
@@ -176,5 +181,132 @@ describe('readSourceContext', () => {
     const wide = await readSourceContext(profile, 'heavyComputation', 8);
 
     expect(wide.lines.length).toBeGreaterThan(narrow.lines.length);
+  });
+
+  it('widens the window to cover hot lines far past the function declaration (H1 regression)', async () => {
+    // longFunctionWithDistantHotLines is declared at line 14 (0-based 13) but its
+    // only hot line is 28 — 14 lines below, outside the old fixed +/-10 window (ended at 24).
+    const profileJson = buildProfileJson(13, [{ line: 28, ticks: 40 }], 'longFunctionWithDistantHotLines');
+    const profile = parseCpuProfile(profileJson, 'test.cpuprofile');
+
+    const result = await readSourceContext(profile, 'longFunctionWithDistantHotLines', 10);
+
+    expect(result.endLine).toBeGreaterThanOrEqual(28);
+    const hotLine = result.lines.find((l) => l.lineNumber === 28);
+    expect(hotLine).toBeDefined();
+    expect(hotLine!.ticks).toBe(40);
+    expect(hotLine!.isHot).toBe(true);
+    expect(result.totalTicks).toBe(40);
+    expect(result.visibleTicks).toBe(40);
+    expect(result.hiddenTicks).toBe(0);
+    expect(result.warning).toBeUndefined();
+  });
+
+  it('reports hiddenTicks and a warning when the tick spread exceeds the window cap', async () => {
+    // Must live inside the repo (not the OS tmpdir) — readSourceContext enforces isWithinCwd.
+    const dir = resolve(import.meta.dirname, 'fixtures/.tmp-huge');
+    await mkdir(dir, { recursive: true });
+    const filePath = join(dir, 'huge.js');
+    try {
+      const lines = ['function hugeFn(data) {'];
+      for (let i = 0; i < 398; i++) lines.push(`  // padding ${i}`);
+      lines.push('}');
+      await writeFile(filePath, lines.join('\n'), 'utf-8');
+
+      // Ticks at line 10 and line 350 are too far apart to fit inside MAX_WINDOW_LINES (200),
+      // so the far tick must be reported as hidden rather than silently dropped.
+      const profileJson = JSON.stringify({
+        nodes: [
+          {
+            id: 1,
+            callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+            hitCount: 0,
+            children: [2],
+          },
+          {
+            id: 2,
+            callFrame: {
+              functionName: 'hugeFn',
+              scriptId: '1',
+              url: `file://${filePath}`,
+              lineNumber: 0,
+              columnNumber: 0,
+            },
+            hitCount: 20,
+            children: [],
+            positionTicks: [
+              { line: 10, ticks: 5 },
+              { line: 350, ticks: 50 },
+            ],
+          },
+        ],
+        startTime: 0,
+        endTime: 200000,
+        samples: new Array(20).fill(2),
+        timeDeltas: new Array(20).fill(10000),
+      });
+      const profile = parseCpuProfile(profileJson, 'test.cpuprofile');
+
+      const result = await readSourceContext(profile, 'hugeFn', 10);
+
+      expect(result.endLine - result.startLine + 1).toBeLessThanOrEqual(200);
+      expect(result.totalTicks).toBe(55);
+      expect(result.hiddenTicks).toBeGreaterThan(0);
+      expect(result.warning).toBeDefined();
+      expect(result.warning).toContain('ticks fall outside');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let ticks from a same-named function in another file pollute totals', async () => {
+    const otherFileTicks = 99;
+    const profileJson = JSON.stringify({
+      nodes: [
+        {
+          id: 1,
+          callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+          hitCount: 0,
+          children: [2, 3],
+        },
+        {
+          id: 2,
+          callFrame: {
+            functionName: 'heavyComputation',
+            scriptId: '1',
+            url: `file://${fixtureSourcePath}`,
+            lineNumber: 1,
+            columnNumber: 0,
+          },
+          hitCount: 20,
+          children: [],
+          positionTicks: [{ line: 5, ticks: 12 }],
+        },
+        {
+          id: 3,
+          callFrame: {
+            functionName: 'heavyComputation',
+            scriptId: '2',
+            url: 'file:///some/other/file.js',
+            lineNumber: 1,
+            columnNumber: 0,
+          },
+          hitCount: 5,
+          children: [],
+          positionTicks: [{ line: 5, ticks: otherFileTicks }],
+        },
+      ],
+      startTime: 0,
+      endTime: 200000,
+      samples: new Array(20).fill(2),
+      timeDeltas: new Array(20).fill(10000),
+    });
+    const profile = parseCpuProfile(profileJson, 'test.cpuprofile');
+
+    const result = await readSourceContext(profile, 'heavyComputation', 5);
+
+    // The node with the highest hitCount (id 2, same-file) is picked as primary,
+    // so only its 12 ticks should count — not the other file's 99.
+    expect(result.totalTicks).toBe(12);
   });
 });

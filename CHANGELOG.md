@@ -6,9 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-09
+
+### Fixed
+
+- **`suggest_optimizations` no longer reports false `recursion` on non-recursive functions.** Detection previously searched a function's _entire descendant subtree_ for a matching **function name**, so it fired on any function that reappeared anywhere deeper in the call tree — including a shared utility reached through an unrelated branch, or a same-named function in a different module. It also treated any structural cycle as recursion, and V8 routinely records sub-millisecond self-edges for inlined or mis-attributed samples. On a real profile this labelled the two hottest functions (a plain `haversine` distance calculation and its O(n²) caller) as recursive on the strength of a 0.3ms edge against 1081ms of work, and recommended "convert tail recursion to iteration" — the wrong fix for the actual bottleneck. Recursion now requires the function to re-enter itself along a single **root-to-leaf path**, is keyed on `functionName + url + lineNumber` rather than name alone, and requires the recursive frames to carry at least **5% of the function's CPU self-time**. The `detail` field now reports the measured recursion depth and self-time share so the finding can be weighed rather than taken on faith.
+- **`cpu-bound` is no longer suppressed by a lower-confidence pattern.** It was emitted only as a fallback when _nothing else_ matched, so a function burning 29% of CPU self-time could report an advisory `hot-caller` ("optimise the caller instead") and never state its own cost, while a 6% function reported it. CPU-cost evidence is now always emitted for functions at or above 5% self-time, in addition to whatever else matched. `patterns` is also ordered by confidence — direct evidence (`gc-pressure`, `v8-deopt`, `json-serialization`, `regex-cost`, gated `recursion`) first, then `cpu-bound`, then advisory patterns (`high-fan-in`, `hot-caller`, `orchestrator`) — so `topSuggestion` can no longer be an advisory pattern on an expensive function.
+- **`read_source_context` / `explain_function(includeSource: true)`** no longer report a misleading window. Previously the shown source lines were a fixed +/-10 (default `contextLines`) radius around the function's _declaration_ line, so a function whose real hot lines were farther down (a common shape) could report a large `totalTicks` while every visible line showed 0-1 ticks, with no indication anything was hidden. The window is now sized from the function's actual tick extent (scoped to its own file, so a same-named function elsewhere can no longer pollute the totals), capped at 200 lines. The result now also reports `visibleTicks` and `hiddenTicks`, plus a `warning` whenever ticks still fall outside the returned window. **Behavior change:** `startLine`/`endLine` (and therefore `lines`) for the same call can now differ from v0.5.1.
+- `explain_function` now accepts an optional `contextLines` parameter for `includeSource: true` instead of hardcoding it to `10`.
+- `load_profile` no longer lets raw filesystem/JSON errors reach the caller. Missing files, a directory path, and malformed JSON now return a clear, actionable `isError` message instead of a raw `ENOENT`/`EISDIR`/`SyntaxError`. Pointing `load_profile` at a directory is still rejected — by design, it only ever accepts a single profile file — but the message now says so plainly instead of surfacing `EISDIR: illegal operation on a directory, read`.
+- Fixed a crash (`TypeError: Cannot read properties of undefined (reading 'selfTime')`) when a profile's call-tree references a child node id that isn't present in `nodes` (e.g. a profile with zero samples). `load_profile` now loads such profiles successfully, reporting `sampleCount: 0`.
+- Added a clear error for a profile with an empty `nodes` array, instead of an unhandled exception.
+
 ### Changed
 
 - Publish workflow migrated to npm trusted publishing (OIDC): `npm publish --provenance` with `id-token: write`, removing the long-lived `NPM_TOKEN` bypass-2FA granular access token.
+- `detectRecursion` is now called with a `FunctionIdentity` (`{ functionName, url, lineNumber }`) instead of a bare function name. This is an internal export, not part of the MCP tool surface.
+
+### Added
+
+- Test coverage for the `load_profile` tool wrapper (`tests/load-profile.test.ts`) — previously only parser functions had tests, which is why the source-window bug went unnoticed.
+- Regression tests reproducing the exact failure shape from `REVIEW.md` H1 (hot lines far past the function declaration) and the window-cap/`hiddenTicks` reporting path.
+- Regression tests for the recursion false positives (negligible self-edge, same name in another file, shared utility in a sibling branch) and for `cpu-bound` surviving alongside an advisory pattern.
 
 ## [0.5.1] - 2026-08-02
 

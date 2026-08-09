@@ -16,6 +16,10 @@ export function parseCpuProfile(json: string, filename: string): ParsedProfile {
     throw new Error('Invalid profile format: missing nodes, samples, or timeDeltas');
   }
 
+  if (raw.nodes.length === 0) {
+    throw new Error('Profile contains no call-tree nodes. The file may be empty or corrupted.');
+  }
+
   const totalDuration = raw.endTime - raw.startTime;
   const nodeMap = new Map<number, AggregatedNode>();
 
@@ -62,7 +66,9 @@ export function parseCpuProfile(json: string, filename: string): ParsedProfile {
   function computeTotalTime(id: number): number {
     if (visited.has(id)) return 0;
     visited.add(id);
-    const node = nodeMap.get(id)!;
+    // A child id can be missing from nodeMap in a truncated/degenerate profile.
+    const node = nodeMap.get(id);
+    if (!node) return 0;
     let total = node.selfTime;
     for (const childId of node.children) {
       total += computeTotalTime(childId);
