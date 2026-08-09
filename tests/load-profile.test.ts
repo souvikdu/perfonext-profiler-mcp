@@ -119,7 +119,13 @@ describe('load_profile error handling', () => {
           nodes: [
             {
               id: 1,
-              callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+              callFrame: {
+                functionName: '(root)',
+                scriptId: '0',
+                url: '',
+                lineNumber: -1,
+                columnNumber: -1,
+              },
               hitCount: 0,
               children: [2, 3, 40],
             },

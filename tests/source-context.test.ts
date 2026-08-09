@@ -186,7 +186,11 @@ describe('readSourceContext', () => {
   it('widens the window to cover hot lines far past the function declaration (H1 regression)', async () => {
     // longFunctionWithDistantHotLines is declared at line 14 (0-based 13) but its
     // only hot line is 28 — 14 lines below, outside the old fixed +/-10 window (ended at 24).
-    const profileJson = buildProfileJson(13, [{ line: 28, ticks: 40 }], 'longFunctionWithDistantHotLines');
+    const profileJson = buildProfileJson(
+      13,
+      [{ line: 28, ticks: 40 }],
+      'longFunctionWithDistantHotLines',
+    );
     const profile = parseCpuProfile(profileJson, 'test.cpuprofile');
 
     const result = await readSourceContext(profile, 'longFunctionWithDistantHotLines', 10);
@@ -219,7 +223,13 @@ describe('readSourceContext', () => {
         nodes: [
           {
             id: 1,
-            callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+            callFrame: {
+              functionName: '(root)',
+              scriptId: '0',
+              url: '',
+              lineNumber: -1,
+              columnNumber: -1,
+            },
             hitCount: 0,
             children: [2],
           },
@@ -265,7 +275,13 @@ describe('readSourceContext', () => {
       nodes: [
         {
           id: 1,
-          callFrame: { functionName: '(root)', scriptId: '0', url: '', lineNumber: -1, columnNumber: -1 },
+          callFrame: {
+            functionName: '(root)',
+            scriptId: '0',
+            url: '',
+            lineNumber: -1,
+            columnNumber: -1,
+          },
           hitCount: 0,
           children: [2, 3],
         },
