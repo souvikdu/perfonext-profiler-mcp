@@ -17,17 +17,21 @@ describe('toPosixPath', () => {
 });
 
 describe('toFilePath', () => {
-  it('converts unix file:// URLs with Node fileURLToPath', () => {
+  it.skipIf(process.platform === 'win32')('converts unix file:// URLs', () => {
     expect(toFilePath('file:///app/src/foo.js')).toBe(fileURLToPath('file:///app/src/foo.js'));
   });
 
-  it('converts Windows drive file:// URLs with Node fileURLToPath', () => {
+  it.skipIf(process.platform !== 'win32')('returns null for unix file:// URLs on Windows', () => {
+    expect(toFilePath('file:///app/src/foo.js')).toBeNull();
+  });
+
+  it('converts Windows drive file:// URLs', () => {
     expect(toFilePath('file:///C:/Users/dev/app.js')).toBe(
       fileURLToPath('file:///C:/Users/dev/app.js'),
     );
   });
 
-  it('decodes percent-encoded spaces', () => {
+  it.skipIf(process.platform === 'win32')('decodes percent-encoded spaces', () => {
     expect(toFilePath('file:///app/My%20Project/foo.js')).toBe(
       fileURLToPath('file:///app/My%20Project/foo.js'),
     );

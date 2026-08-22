@@ -25,6 +25,7 @@ export function toFilePath(urlOrPath: string): string | null {
     try {
       return fileURLToPath(urlOrPath);
     } catch {
+      // Not representable on this OS (e.g. a Unix URL on Windows).
       return null;
     }
   }

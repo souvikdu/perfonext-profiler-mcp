@@ -155,6 +155,8 @@ describe('readSourceContext', () => {
   });
 
   it('throws when the source file URL is outside cwd', async () => {
+    // An OS-appropriate absolute path that is guaranteed to be outside the cwd.
+    const outsideUrl = pathToFileURL(resolve(process.cwd(), '../outside-root.js')).href;
     const profileJson = JSON.stringify({
       nodes: [
         {
@@ -174,7 +176,7 @@ describe('readSourceContext', () => {
           callFrame: {
             functionName: 'secretFn',
             scriptId: '1',
-            url: 'file:///etc/passwd',
+            url: outsideUrl,
             lineNumber: 0,
             columnNumber: 0,
           },
