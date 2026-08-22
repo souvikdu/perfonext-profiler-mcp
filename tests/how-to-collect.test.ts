@@ -7,7 +7,7 @@ describe('how_to_collect recipe', () => {
     const recipe = buildCollectRecipe('next-server');
     expect(recipe.scenario).toBe('next-server');
     expect(recipe.command).toBe(
-      "NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start",
+      'node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start',
     );
     expect(recipe.outputDir).toBe('./.perf-profiles');
   });
@@ -43,7 +43,7 @@ describe('how_to_collect tool – default scenario', () => {
 
     expect(payload.scenario).toBe('next-server');
     expect(payload.command).toBe(
-      "NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start",
+      'node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start',
     );
   });
 });

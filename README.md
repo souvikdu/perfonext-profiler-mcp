@@ -43,6 +43,25 @@ Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration
 
 Then reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears. For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
 
+If the server fails with `spawn npx ENOENT` (or `spawn node ENOENT`), VS Code was likely launched from the Dock/Finder and cannot see nvm. GUI apps do not load shell config, so `npx` is not on `PATH`. Fix it by giving the MCP config an absolute `npx` path and a `PATH` that includes the same Node bin directory (`dirname $(which npx)`):
+
+```json
+{
+  "servers": {
+    "perfonext-profiler": {
+      "type": "stdio",
+      "command": "/Users/YOU/.nvm/versions/node/v20.10.0/bin/npx",
+      "args": ["-y", "@perfonext/profiler-mcp"],
+      "env": {
+        "PATH": "/Users/YOU/.nvm/versions/node/v20.10.0/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}
+```
+
+Alternatively, start VS Code from a terminal that already has nvm loaded (`code .`) so it inherits `PATH`.
+
 Then ask Copilot: _"How do I capture a CPU profile of my Next.js server?"_
 
 ## What It Does
@@ -98,14 +117,14 @@ Every tool result carries a `nextStep` breadcrumb pointing at the natural follow
 {
   "scenario": "next-server",
   "summary": "Profile a production Next.js server while it handles a single request. ...",
-  "command": "NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start",
+  "command": "node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start",
   "steps": [ "...", "load_profile({ filePath: \"./.perf-profiles/<file>.cpuprofile\" })" ],
   "outputDir": "./.perf-profiles",
   "nextStep": "After stopping the server, call load_profile with the .cpuprofile ..."
 }
 ```
 
-`next-server` profiles a production Next.js server while it serves a single request; `script` profiles a standalone Node.js script. Node writes one `.cpuprofile` per process/worker thread into the output directory. The `command` uses bash/zsh env-var syntax (`NODE_OPTIONS='...' next start`); on Windows PowerShell, set `$env:NODE_OPTIONS` first.
+`next-server` profiles a production Next.js server while it serves a single request; `script` profiles a standalone Node.js script. Node writes one `.cpuprofile` per process/worker thread into the output directory. The Next server command uses Node CLI flags (not `NODE_OPTIONS`) so it is the same on Unix and Windows.
 
 ### `read_source_context` details
 
@@ -203,7 +222,7 @@ Ask Copilot to call `how_to_collect` for a ready-to-run recipe, or generate one 
 Next.js production server (profile a single request):
 
 ```bash
-NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./.perf-profiles' next start
+node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start
 # hit the route once, then Ctrl-C to flush the profile
 ```
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { isInsideRoot, splitLines, toFilePath } from '../platform.js';
 import { getProfile } from '../store.js';
 import { ParsedProfile } from '../parser/types.js';
 
@@ -29,31 +29,6 @@ export interface SourceContextResult {
 const MAX_WINDOW_LINES = 200;
 
 /**
- * Convert a file:// URL or absolute path to a filesystem path.
- * Returns null for URLs with unsupported schemes (http, node:, etc.).
- */
-export function fileUrlToPath(url: string): string | null {
-  if (url.startsWith('file://')) {
-    // file:///path  → /path  (strip file:// prefix)
-    return decodeURIComponent(url.slice('file://'.length));
-  }
-  // Already an absolute path
-  if (url.startsWith('/') || /^[A-Za-z]:[/\\]/.test(url)) {
-    return url;
-  }
-  return null;
-}
-
-/**
- * Security gate: the resolved path must be within the current working directory.
- */
-export function isWithinCwd(filePath: string): boolean {
-  const cwd = process.cwd();
-  const resolved = resolve(filePath);
-  return resolved === cwd || resolved.startsWith(cwd + '/') || resolved.startsWith(cwd + '\\');
-}
-
-/**
  * Core logic, exported for unit testing.
  */
 export async function readSourceContext(
@@ -77,7 +52,7 @@ export async function readSourceContext(
   const primary = matches.reduce((best, n) => (n.hitCount > best.hitCount ? n : best), matches[0]);
 
   const { url, lineNumber: rawLine } = primary.callFrame;
-  const filePath = fileUrlToPath(url);
+  const filePath = toFilePath(url);
 
   if (!filePath) {
     throw new Error(
@@ -86,7 +61,7 @@ export async function readSourceContext(
     );
   }
 
-  if (!isWithinCwd(filePath)) {
+  if (!isInsideRoot(filePath)) {
     throw new Error(
       `Access denied: "${filePath}" is outside the current working directory. ` +
         `The server only reads source files within the project root.`,
@@ -94,7 +69,7 @@ export async function readSourceContext(
   }
 
   const content = await readFile(filePath, 'utf-8');
-  const allLines = content.split('\n');
+  const allLines = splitLines(content);
 
   // Only aggregate ticks from nodes in the same file — same function name in a
   // different file must not pollute this function's tick totals or window.

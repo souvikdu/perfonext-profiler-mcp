@@ -4,6 +4,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export type CollectScenario = 'next-server' | 'script';
 
 const PROFILE_DIR = './.perf-profiles';
+const NEXT_SERVER_COMMAND = `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} ./node_modules/next/dist/bin/next start`;
+const SCRIPT_COMMAND = `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} your-script.js`;
 
 export interface CollectRecipe {
   scenario: CollectScenario;
@@ -25,9 +27,9 @@ export function buildCollectRecipe(scenario: CollectScenario): CollectRecipe {
       summary:
         'Profile a standalone Node.js script. Node writes one .cpuprofile per ' +
         'process/worker thread into the output directory.',
-      command: `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} your-script.js`,
+      command: SCRIPT_COMMAND,
       steps: [
-        `Run: node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} your-script.js`,
+        `Run: ${SCRIPT_COMMAND}`,
         'Let the script finish (the profile is flushed on exit).',
         `Load the result: load_profile({ filePath: "${PROFILE_DIR}/<file>.cpuprofile" })`,
       ],
@@ -41,12 +43,11 @@ export function buildCollectRecipe(scenario: CollectScenario): CollectRecipe {
     scenario: 'next-server',
     summary:
       'Profile a production Next.js server while it handles a single request. ' +
-      'Keep the scenario narrow (one route, one hit) so the profile stays focused. ' +
-      'Command uses bash/zsh env-var syntax; on Windows PowerShell, set $env:NODE_OPTIONS first.',
-    command: `NODE_OPTIONS='--cpu-prof --cpu-prof-dir=${PROFILE_DIR}' next start`,
+      'Keep the scenario narrow (one route, one hit) so the profile stays focused.',
+    command: NEXT_SERVER_COMMAND,
     steps: [
       'Build first if you have not already: next build',
-      `Start the server with profiling: NODE_OPTIONS='--cpu-prof --cpu-prof-dir=${PROFILE_DIR}' next start`,
+      `Start the server with profiling: ${NEXT_SERVER_COMMAND}`,
       'Hit the route you want to profile exactly once (e.g. curl http://localhost:3000/your-route).',
       'Stop the server with Ctrl-C — Node flushes the .cpuprofile on exit.',
       `Load the result: load_profile({ filePath: "${PROFILE_DIR}/<file>.cpuprofile" })`,
