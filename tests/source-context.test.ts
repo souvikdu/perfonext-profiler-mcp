@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { resolve, join } from 'node:path';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { parseCpuProfile } from '../src/parser/cpuprofile.js';
-import { readSourceContext, fileUrlToPath, isWithinCwd } from '../src/tools/read-source-context.js';
+import { readSourceContext } from '../src/tools/read-source-context.js';
 
 // Absolute path to the fixture source file we will reference in test profiles
 const fixtureSourcePath = resolve(import.meta.dirname, 'fixtures/sample-source.js');
+const fixtureSourceUrl = pathToFileURL(fixtureSourcePath).href;
 
 /**
  * Build a minimal cpuprofile JSON string whose hot node points at
@@ -35,7 +37,7 @@ function buildProfileJson(
         callFrame: {
           functionName,
           scriptId: '1',
-          url: `file://${fixtureSourcePath}`,
+          url: fixtureSourceUrl,
           lineNumber, // 0-based
           columnNumber: 0,
         },
@@ -50,40 +52,6 @@ function buildProfileJson(
     timeDeltas: new Array(20).fill(10000),
   });
 }
-
-describe('fileUrlToPath', () => {
-  it('strips file:// prefix', () => {
-    expect(fileUrlToPath('file:///app/src/foo.js')).toBe('/app/src/foo.js');
-  });
-
-  it('returns absolute paths as-is', () => {
-    expect(fileUrlToPath('/home/user/project/src/foo.js')).toBe('/home/user/project/src/foo.js');
-  });
-
-  it('returns null for http URLs', () => {
-    expect(fileUrlToPath('http://example.com/foo.js')).toBeNull();
-  });
-
-  it('returns null for node: builtins', () => {
-    expect(fileUrlToPath('node:fs')).toBeNull();
-  });
-});
-
-describe('isWithinCwd', () => {
-  it('accepts a path inside cwd', () => {
-    const inside = resolve(process.cwd(), 'src/index.ts');
-    expect(isWithinCwd(inside)).toBe(true);
-  });
-
-  it('rejects a path outside cwd', () => {
-    expect(isWithinCwd('/etc/passwd')).toBe(false);
-  });
-
-  it('rejects a path that traverses above cwd via ..', () => {
-    const escaped = resolve(process.cwd(), '../../etc/passwd');
-    expect(isWithinCwd(escaped)).toBe(false);
-  });
-});
 
 describe('readSourceContext', () => {
   it('returns annotated lines centred on the function', async () => {
@@ -100,6 +68,7 @@ describe('readSourceContext', () => {
     expect(result.functionName).toBe('heavyComputation');
     expect(result.functionLine).toBe(2); // 0-based 1 → 1-based 2
     expect(result.file).toBe(fixtureSourcePath);
+    expect(result.lines.every((line) => !line.content.includes('\r'))).toBe(true);
     expect(result.startLine).toBeGreaterThanOrEqual(1);
     expect(result.endLine).toBeGreaterThan(result.startLine);
 
@@ -114,6 +83,56 @@ describe('readSourceContext', () => {
     expect(coolLine).toBeDefined();
     expect(coolLine!.ticks).toBe(3);
     expect(coolLine!.isHot).toBe(false);
+  });
+
+  it('strips CR from CRLF source files', async () => {
+    const dir = resolve(import.meta.dirname, 'fixtures/.tmp-crlf');
+    await mkdir(dir, { recursive: true });
+    const filePath = join(dir, 'crlf.js');
+    try {
+      await writeFile(filePath, 'function crlfFn() {\r\n  return 1;\r\n}\r\n', 'utf-8');
+      const profileJson = JSON.stringify({
+        nodes: [
+          {
+            id: 1,
+            callFrame: {
+              functionName: '(root)',
+              scriptId: '0',
+              url: '',
+              lineNumber: -1,
+              columnNumber: -1,
+            },
+            hitCount: 0,
+            children: [2],
+          },
+          {
+            id: 2,
+            callFrame: {
+              functionName: 'crlfFn',
+              scriptId: '1',
+              url: pathToFileURL(filePath).href,
+              lineNumber: 0,
+              columnNumber: 0,
+            },
+            hitCount: 5,
+            children: [],
+            positionTicks: [{ line: 2, ticks: 5 }],
+          },
+        ],
+        startTime: 0,
+        endTime: 50000,
+        samples: [2, 2, 2, 2, 2],
+        timeDeltas: new Array(5).fill(10000),
+      });
+      const profile = parseCpuProfile(profileJson, 'test.cpuprofile');
+      const result = await readSourceContext(profile, 'crlfFn', 1);
+
+      expect(result.lines.length).toBeGreaterThan(0);
+      expect(result.lines.every((line) => !line.content.includes('\r'))).toBe(true);
+      expect(result.lines.some((line) => line.content.includes('return 1;'))).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('returns lines without tick annotations when positionTicks is absent', async () => {
@@ -136,6 +155,8 @@ describe('readSourceContext', () => {
   });
 
   it('throws when the source file URL is outside cwd', async () => {
+    // An OS-appropriate absolute path that is guaranteed to be outside the cwd.
+    const outsideUrl = pathToFileURL(resolve(process.cwd(), '../outside-root.js')).href;
     const profileJson = JSON.stringify({
       nodes: [
         {
@@ -155,7 +176,7 @@ describe('readSourceContext', () => {
           callFrame: {
             functionName: 'secretFn',
             scriptId: '1',
-            url: 'file:///etc/passwd',
+            url: outsideUrl,
             lineNumber: 0,
             columnNumber: 0,
           },
@@ -207,7 +228,7 @@ describe('readSourceContext', () => {
   });
 
   it('reports hiddenTicks and a warning when the tick spread exceeds the window cap', async () => {
-    // Must live inside the repo (not the OS tmpdir) — readSourceContext enforces isWithinCwd.
+    // Must live inside the repo (not the OS tmpdir) — readSourceContext enforces isInsideRoot.
     const dir = resolve(import.meta.dirname, 'fixtures/.tmp-huge');
     await mkdir(dir, { recursive: true });
     const filePath = join(dir, 'huge.js');
@@ -238,7 +259,7 @@ describe('readSourceContext', () => {
             callFrame: {
               functionName: 'hugeFn',
               scriptId: '1',
-              url: `file://${filePath}`,
+              url: pathToFileURL(filePath).href,
               lineNumber: 0,
               columnNumber: 0,
             },
@@ -290,7 +311,7 @@ describe('readSourceContext', () => {
           callFrame: {
             functionName: 'heavyComputation',
             scriptId: '1',
-            url: `file://${fixtureSourcePath}`,
+            url: fixtureSourceUrl,
             lineNumber: 1,
             columnNumber: 0,
           },

@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseCpuProfile } from '../src/parser/cpuprofile.js';
-import { getHotspots, buildCallTree, getCallersOf, getCalleesOf } from '../src/parser/call-tree.js';
+import {
+  extractPackageName,
+  getHotspots,
+  buildCallTree,
+  getCallersOf,
+  getCalleesOf,
+} from '../src/parser/call-tree.js';
 
 const fixturePath = resolve(import.meta.dirname, 'fixtures/sample.cpuprofile');
 
@@ -46,6 +52,48 @@ describe('cpuprofile parser', () => {
 
   it('rejects invalid profile data', () => {
     expect(() => parseCpuProfile('{}', 'bad.cpuprofile')).toThrow('Invalid profile format');
+  });
+
+  it('canonicalizes Windows filesystem paths to POSIX file:// at ingest', () => {
+    const profile = parseCpuProfile(
+      JSON.stringify({
+        nodes: [
+          {
+            id: 1,
+            callFrame: {
+              functionName: '(root)',
+              scriptId: '0',
+              url: '',
+              lineNumber: -1,
+              columnNumber: -1,
+            },
+            hitCount: 0,
+            children: [2],
+          },
+          {
+            id: 2,
+            callFrame: {
+              functionName: 'chunk',
+              scriptId: '1',
+              url: 'C:\\proj\\node_modules\\lodash\\index.js',
+              lineNumber: 0,
+              columnNumber: 0,
+            },
+            hitCount: 1,
+            children: [],
+          },
+        ],
+        startTime: 0,
+        endTime: 10000,
+        samples: [2],
+        timeDeltas: [10000],
+      }),
+      'win.cpuprofile',
+    );
+
+    const url = profile.nodes.get(2)!.callFrame.url;
+    expect(url).toBe('file:///C:/proj/node_modules/lodash/index.js');
+    expect(extractPackageName(url)).toBe('lodash');
   });
 });
 

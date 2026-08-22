@@ -4,6 +4,19 @@ All notable changes to `@perfonext/profiler-mcp` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.6.1] - 2026-08-23
+
+### Fixed
+
+- **`read_source_context` now resolves Windows `file://` URLs and CRLF sources correctly.** The previous helper stripped the `file://` prefix by hand, so V8 frames like `file:///C:/Users/...` became `/C:/Users/...` and failed to open. Sandbox checks now use `path.relative` (and `realpath` when the file exists) instead of a string prefix. Source files are split on LF, CRLF, or CR so Windows line endings no longer leave a trailing `\r` on every line. Profile `callFrame.url` values are canonicalized to POSIX `file://` at ingest.
+- **`how_to_collect` next-server recipe is no longer bash-only.** It now starts Next via `node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start` instead of `NODE_OPTIONS='...' next start`.
+
+### Changed
+
+- Pull-request CI now also runs on `windows-latest`, still on Node 22 (same as `.nvmrc` and publish).
+
 ## [0.6.0] - 2026-08-09
 
 ### Fixed

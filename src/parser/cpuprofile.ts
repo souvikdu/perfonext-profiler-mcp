@@ -1,5 +1,6 @@
 import { CpuProfile, AggregatedNode, ParsedProfile } from './types.js';
 import { randomUUID } from 'node:crypto';
+import { canonicalizeProfileUrl } from '../platform.js';
 import { detectFormat, parseTraceProfile } from './trace.js';
 
 export function parseCpuProfile(json: string, filename: string): ParsedProfile {
@@ -23,11 +24,15 @@ export function parseCpuProfile(json: string, filename: string): ParsedProfile {
   const totalDuration = raw.endTime - raw.startTime;
   const nodeMap = new Map<number, AggregatedNode>();
 
-  // Build node map with zero times initially
+  // Build node map with zero times initially. Canonicalize filesystem / file://
+  // URLs once so later tools only see POSIX file:// identity.
   for (const node of raw.nodes) {
     nodeMap.set(node.id, {
       id: node.id,
-      callFrame: node.callFrame,
+      callFrame: {
+        ...node.callFrame,
+        url: canonicalizeProfileUrl(node.callFrame.url ?? ''),
+      },
       selfTime: 0,
       totalTime: 0,
       hitCount: node.hitCount,

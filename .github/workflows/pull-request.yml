@@ -7,21 +7,24 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
       matrix:
-        node-version: [20, 22]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf input
+
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
