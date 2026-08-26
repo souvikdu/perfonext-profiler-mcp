@@ -13,7 +13,8 @@ evidence agents can reason over instead of ingesting multi-megabyte profile dump
 
 ## Quick Start
 
-Run directly with `npx`:
+`perfonext-profiler-mcp` is a standard MCP stdio server, so it works with any MCP-compatible client
+(GitHub Copilot in VS Code, Claude Desktop, Claude Code, Cursor, and others). Run it directly with `npx`:
 
 ```bash
 npx -y @perfonext/profiler-mcp
@@ -27,7 +28,9 @@ npm install -g @perfonext/profiler-mcp
 
 The executable command remains `perfonext-profiler-mcp` after installation.
 
-Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration file):
+### VS Code
+
+Add the server to `.vscode/mcp.json` (the workspace MCP configuration file):
 
 ```json
 {
@@ -41,28 +44,67 @@ Add the server to VS Code in `.vscode/mcp.json` (the workspace MCP configuration
 }
 ```
 
-Then reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears. For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
+Reload the VS Code window and run **MCP: List Servers** to start it, or accept the trust prompt when it appears.
 
-If the server fails with `spawn npx ENOENT` (or `spawn node ENOENT`), VS Code was likely launched from the Dock/Finder and cannot see nvm. GUI apps do not load shell config, so `npx` is not on `PATH`. Fix it by giving the MCP config an absolute `npx` path and a `PATH` that includes the same Node bin directory (`dirname $(which npx)`):
+### Claude Desktop
+
+Add the server to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "perfonext-profiler": {
+      "command": "npx",
+      "args": ["-y", "@perfonext/profiler-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop to pick up the new server.
+
+### Claude Code
+
+Add the server with the CLI:
+
+```bash
+claude mcp add perfonext-profiler -- npx -y @perfonext/profiler-mcp
+```
+
+Or add the same `mcpServers` entry to `.mcp.json`.
+
+### Other MCP clients
+
+Any client that supports stdio MCP servers can launch `npx -y @perfonext/profiler-mcp`. Consult your
+client's documentation for its MCP server configuration format.
+
+For a locally-built checkout, point `command`/`args` at `node` and the repo's `dist/index.js` instead.
+
+## Troubleshooting
+
+### `spawn npx ENOENT` / `spawn node ENOENT` on macOS with nvm
+
+If the server fails to start with this error, your GUI MCP client likely cannot see nvm. GUI apps on
+macOS do not load shell config (`.zshrc`/`.bashrc`), so nvm-installed `npx`/`node` are not on `PATH`.
+Use an absolute `npx` path and include the same Node directory in `PATH`:
 
 ```json
 {
   "servers": {
     "perfonext-profiler": {
       "type": "stdio",
-      "command": "/Users/YOU/.nvm/versions/node/v20.10.0/bin/npx",
+      "command": "/Users/YOU/.nvm/versions/node/v<version>/bin/npx",
       "args": ["-y", "@perfonext/profiler-mcp"],
       "env": {
-        "PATH": "/Users/YOU/.nvm/versions/node/v20.10.0/bin:/usr/bin:/bin"
+        "PATH": "/Users/YOU/.nvm/versions/node/v<version>/bin:/usr/bin:/bin"
       }
     }
   }
 }
 ```
 
-Alternatively, start VS Code from a terminal that already has nvm loaded (`code .`) so it inherits `PATH`.
-
-Then ask Copilot: _"How do I capture a CPU profile of my Next.js server?"_
+Merge these fields into your client's server entry, under `servers` for VS Code or `mcpServers` for
+Claude Desktop/Code. Then ask your assistant: _"How do I capture a CPU profile of my Next.js server?"_
 
 ## What It Does
 
@@ -91,7 +133,7 @@ Then ask Copilot: _"How do I capture a CPU profile of my Next.js server?"_
 
 Every tool result carries a `nextStep` breadcrumb pointing at the natural follow-up call, so an MCP client can walk the collect → analyze → fix loop without guessing.
 
-## Example Copilot Prompts
+## Example Prompts
 
 - "How do I capture a CPU profile of my Next.js server?"
 - "Load the CPU profile at `./profile.cpuprofile` and show me the top hotspots."
