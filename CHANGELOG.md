@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-27
+
+### Changed
+
+- README setup instructions now cover VS Code, Claude Desktop, Claude Code, and other MCP-compatible clients, with macOS and nvm troubleshooting for missing `npx` or `node` paths.
+
 ## [0.6.1] - 2026-08-23
 
 ### Fixed
