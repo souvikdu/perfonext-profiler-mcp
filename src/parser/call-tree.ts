@@ -75,12 +75,30 @@ function buildTreeRecursive(
   totalDuration: number,
   minTimePercent = 0.1,
 ): CallTreeNode {
-  const node = profile.nodes.get(nodeId)!;
+  const node = profile.nodes.get(nodeId);
+  if (!node) {
+    return {
+      functionName: '(root)',
+      url: '',
+      lineNumber: 1,
+      selfTime: 0,
+      totalTime: 0,
+      selfPercent: 0,
+      totalPercent: 0,
+      children: [],
+    };
+  }
+
   const children =
     currentDepth < maxDepth
       ? node.children
-          .map((cid) => profile.nodes.get(cid)!)
-          .filter((c) => c.totalTime > 0 && (c.totalTime / totalDuration) * 100 >= minTimePercent)
+          .map((cid) => profile.nodes.get(cid))
+          .filter(
+            (c): c is AggregatedNode =>
+              c !== undefined &&
+              c.totalTime > 0 &&
+              (totalDuration > 0 ? (c.totalTime / totalDuration) * 100 >= minTimePercent : false),
+          )
           .sort((a, b) => b.totalTime - a.totalTime)
           .slice(0, 20) // Cap to top 20 children per node
           .map((c) =>
@@ -101,8 +119,8 @@ function buildTreeRecursive(
     lineNumber: node.callFrame.lineNumber + 1,
     selfTime: node.selfTime,
     totalTime: node.totalTime,
-    selfPercent: (node.selfTime / totalDuration) * 100,
-    totalPercent: (node.totalTime / totalDuration) * 100,
+    selfPercent: totalDuration > 0 ? (node.selfTime / totalDuration) * 100 : 0,
+    totalPercent: totalDuration > 0 ? (node.totalTime / totalDuration) * 100 : 0,
     children,
   };
 }

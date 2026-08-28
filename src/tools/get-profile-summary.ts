@@ -74,13 +74,20 @@ export function registerGetProfileSummary(server: McpServer) {
 
       const tree = buildCallTree(profile, undefined, treeDepth);
 
+      const idlePercentNum =
+        profile.totalDuration > 0 ? (idleTime / profile.totalDuration) * 100 : 0;
+      const activePercentNum =
+        profile.totalDuration > 0
+          ? ((profile.totalDuration - idleTime) / profile.totalDuration) * 100
+          : 0;
+
       const summary = {
         filename: profile.filename,
         totalDuration: `${(profile.totalDuration / 1000).toFixed(1)}ms`,
         sampleCount: profile.sampleCount,
         nodeCount: profile.nodes.size,
-        idlePercent: `${((idleTime / profile.totalDuration) * 100).toFixed(1)}%`,
-        activePercent: `${(((profile.totalDuration - idleTime) / profile.totalDuration) * 100).toFixed(1)}%`,
+        idlePercent: `${idlePercentNum.toFixed(1)}%`,
+        activePercent: `${activePercentNum.toFixed(1)}%`,
         callTree: tree,
         nextStep: `Call get_hotspots with profileId '${profileId}' to rank functions by self-time.`,
       };

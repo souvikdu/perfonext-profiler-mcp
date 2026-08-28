@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-08-29
+
+### Fixed
+
+- Empty or zero-sample CPU profiles now produce an empty call tree and zero-valued summary percentages instead of crashing or returning `NaN` values.
+
 ## [0.6.2] - 2026-08-27
 
 ### Changed

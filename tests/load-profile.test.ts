@@ -3,6 +3,7 @@ import { writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { registerLoadProfile, formatLoadProfileError } from '../src/tools/load-profile.js';
+import { registerGetProfileSummary } from '../src/tools/get-profile-summary.js';
 import { removeProfile } from '../src/store.js';
 import { createToolHandlerStub } from './helpers/tool-stub.js';
 
@@ -140,12 +141,21 @@ describe('load_profile error handling', () => {
 
       const { server, call } = createToolHandlerStub();
       registerLoadProfile(server);
+      registerGetProfileSummary(server);
 
       const result = await call('load_profile', { filePath: zeroSampleFile });
       expect(result.isError).toBeFalsy();
       const payload = JSON.parse(result.content[0].text as string);
       loadedProfileId = payload.profileId;
       expect(payload.sampleCount).toBe(0);
+
+      // Verify get_profile_summary returns a zero-valued summary without throwing TypeError
+      const summaryResult = await call('get_profile_summary', { profileId: loadedProfileId });
+      expect(summaryResult.isError).toBeFalsy();
+      const summaryPayload = JSON.parse(summaryResult.content[0].text as string);
+      expect(summaryPayload.idlePercent).toBe('0.0%');
+      expect(summaryPayload.activePercent).toBe('0.0%');
+      expect(summaryPayload.callTree.children).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
