@@ -60,7 +60,7 @@
     "globals": "^15.14.0",
     "prettier": "^3.4.2",
     "shx": "^0.4.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.18.2",
     "vitest": "^4.1.10"
   }
