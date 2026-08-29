@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-29
+
+### Fixed
+
+- The in-memory profile store now keeps only the 20 most recently loaded profiles, evicting the oldest first. A long-running server session previously retained every parsed profile for its lifetime.
+- Profile format detection now inspects the parsed JSON instead of scanning the raw text, so a `.cpuprofile` containing the literal string `"traceEvents"` in a function name or script URL is no longer misread as a Chrome Trace export.
+
 ## [0.6.4] - 2026-08-29
 
 ### Fixed

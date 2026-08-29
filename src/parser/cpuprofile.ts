@@ -6,11 +6,11 @@ import { detectFormat, parseTraceProfile } from './trace.js';
 export function parseCpuProfile(json: string, filename: string): ParsedProfile {
   let raw: CpuProfile;
 
-  const format = detectFormat(json);
-  if (format === 'trace') {
-    raw = parseTraceProfile(json);
+  const parsed: unknown = JSON.parse(json);
+  if (detectFormat(parsed) === 'trace') {
+    raw = parseTraceProfile(parsed);
   } else {
-    raw = JSON.parse(json);
+    raw = parsed as CpuProfile;
   }
 
   if (!raw.nodes || !raw.samples || !raw.timeDeltas) {
