@@ -15,7 +15,7 @@ import { registerHowToCollect } from './tools/how-to-collect.js';
 
 const server = new McpServer({
   name: 'perfonext-profiler-mcp',
-  version: '0.6.3',
+  version: '0.6.4',
 });
 
 // Register all tools

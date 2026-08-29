@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-08-29
+
+### Fixed
+
+- `suggest_optimizations` now reports `recursion` only for direct self-recursion. Indirect re-entry (`f -> g -> f`) is indistinguishable in sample data from V8 inlining a callee into its caller, which made non-recursive nested loops the top recommendation.
+- `high-fan-in` no longer counts a function as one of its own call sites, and `hot-caller` no longer names the synthetic `(root)`, `(program)`, or `(idle)` frames as the caller to optimise.
+
 ## [0.6.3] - 2026-08-29
 
 ### Fixed

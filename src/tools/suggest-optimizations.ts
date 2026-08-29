@@ -40,6 +40,9 @@ export interface FunctionIdentity {
  */
 const RECURSION_MIN_SELF_TIME_SHARE = 0.05;
 
+/** V8 bookkeeping frames. They are not call sites, so advice naming them is meaningless. */
+const SYNTHETIC_FRAME_NAMES = new Set(['(root)', '(program)', '(idle)', '(garbage collector)']);
+
 /** Above this self-time share a function always carries explicit CPU-cost evidence. */
 const CPU_BOUND_MIN_SELF_PERCENT = 5;
 
@@ -70,6 +73,9 @@ function identityKey(frame: FunctionIdentity): string {
  * Collect distinct caller identities keyed by functionName::url::lineNumber to
  * avoid inflating fan-in counts when the same logical caller appears as
  * multiple nodes (e.g. after inlining or across aggregation boundaries).
+ *
+ * Self-edges are skipped: V8 inlining produces `f -> g -> f` for non-recursive
+ * code, which otherwise listed a function among its own call sites.
  */
 function getUniqueCallerIdentities(
   profile: ParsedProfile,
@@ -82,6 +88,7 @@ function getUniqueCallerIdentities(
     const parent = profile.nodes.get(node.parent);
     if (!parent) continue;
     const cf = parent.callFrame;
+    if (cf.functionName === functionName) continue;
     const key = `${cf.functionName}::${cf.url}::${cf.lineNumber}`;
     keys.add(key);
     namesByKey.set(key, cf.functionName || '(anonymous)');
@@ -110,17 +117,13 @@ export function detectHighFanIn(profile: ParsedProfile, functionName: string): P
 }
 
 /**
- * Recursion: the function re-enters itself along a single root-to-leaf path, and
- * those re-entrant frames carry a material share of its CPU self-time.
+ * Recursion: a call-tree node whose immediate parent is the same function, where
+ * those frames carry a material share of its CPU self-time.
  *
- * Both conditions matter. Searching a node's whole descendant subtree (rather
- * than its own ancestor path) flags any shared utility that happens to appear
- * deeper in an unrelated branch, and matching on function name alone conflates
- * same-named functions across modules. The self-time share then discards
- * structural cycles that carry no real cost — the shape V8 produces for inlined
- * or mis-attributed samples.
- *
- * Uses an iterative DFS to avoid stack overflow on deep profiles.
+ * Indirect re-entry (`f -> g -> f`) is not claimed — in sample data it is
+ * indistinguishable from V8 inlining a callee into its caller, the shape a plain
+ * nested loop produces. This gives up mutual recursion, which sampling cannot
+ * prove anyway, to avoid telling a non-recursive function to unroll itself.
  */
 export function detectRecursion(
   profile: ParsedProfile,
@@ -130,32 +133,16 @@ export function detectRecursion(
 
   let selfTimeTotal = 0;
   let selfTimeRecursive = 0;
-  let maxDepth = 0;
 
-  // Each frame carries how many times the target already appears on its path.
-  const stack: Array<{ id: number; depth: number }> = [{ id: profile.root, depth: 0 }];
-  const visited = new Set<number>();
+  for (const node of profile.nodes.values()) {
+    if (identityKey(node.callFrame) !== targetKey) continue;
 
-  while (stack.length > 0) {
-    const { id, depth } = stack.pop()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
+    selfTimeTotal += node.selfTime;
 
-    const node = profile.nodes.get(id);
-    if (!node) continue;
-
-    const isTarget = identityKey(node.callFrame) === targetKey;
-    const nextDepth = isTarget ? depth + 1 : depth;
-
-    if (isTarget) {
-      selfTimeTotal += node.selfTime;
-      if (nextDepth > 1) {
-        selfTimeRecursive += node.selfTime;
-        if (nextDepth > maxDepth) maxDepth = nextDepth;
-      }
+    const parent = node.parent === null ? undefined : profile.nodes.get(node.parent);
+    if (parent && identityKey(parent.callFrame) === targetKey) {
+      selfTimeRecursive += node.selfTime;
     }
-
-    for (const childId of node.children) stack.push({ id: childId, depth: nextDepth });
   }
 
   if (selfTimeTotal <= 0 || selfTimeRecursive <= 0) return null;
@@ -166,8 +153,8 @@ export function detectRecursion(
   return {
     pattern: 'recursion',
     detail:
-      `Re-enters itself (directly or indirectly) up to ${maxDepth} levels deep; ` +
-      `recursive frames account for ${(share * 100).toFixed(1)}% of its CPU self-time`,
+      `Calls itself directly; self-recursive frames account for ` +
+      `${(share * 100).toFixed(1)}% of its CPU self-time`,
     suggestion:
       'Recursive functions can cause stack pressure and prevent V8 inlining. ' +
       'Consider converting tail recursion to iteration, adding a depth limit, ' +
@@ -178,6 +165,7 @@ export function detectRecursion(
 /**
  * Hot caller: one caller accounts for the dominant share of this function's total hits.
  * Threshold: single caller contributes ≥ 80% of all call-site occurrences.
+ * Synthetic V8 frames are skipped — they cannot be made to call anything less often.
  */
 export function detectHotCaller(profile: ParsedProfile, functionName: string): PatternMatch | null {
   // Count occurrences per parent function name
@@ -189,6 +177,7 @@ export function detectHotCaller(profile: ParsedProfile, functionName: string): P
     if (node.parent === null) continue;
     const parent = profile.nodes.get(node.parent);
     const callerName = parent?.callFrame.functionName || '(anonymous)';
+    if (SYNTHETIC_FRAME_NAMES.has(callerName)) continue;
     callerCounts.set(callerName, (callerCounts.get(callerName) ?? 0) + 1);
     total++;
   }

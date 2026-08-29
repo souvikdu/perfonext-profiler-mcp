@@ -129,6 +129,21 @@ describe('suggest_optimizations – fan-in', () => {
     const profile = makeProfile(nodes);
     expect(detectHighFanIn(profile, 'util')).toBeNull();
   });
+
+  it('does NOT count the function itself as one of its own call sites', () => {
+    // V8 inlining yields `haversine -> ... -> haversine`.
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2, 4]),
+      makeNode(2, 'callerA', 1, [3]),
+      makeNode(3, 'haversine', 2, [6], 50, 100),
+      makeNode(4, 'callerB', 1, [5]),
+      makeNode(5, 'haversine', 4, [], 50, 50),
+      makeNode(6, 'haversine', 3, [], 50, 50),
+    ];
+    const profile = makeProfile(nodes);
+    // Three caller nodes exist, but only two are distinct non-self call sites.
+    expect(detectHighFanIn(profile, 'haversine')).toBeNull();
+  });
 });
 
 // ─── Recursion detection ─────────────────────────────────────────────────────
@@ -147,10 +162,11 @@ describe('suggest_optimizations – recursion', () => {
     const result = detectRecursion(profile, RECURSE);
     expect(result).not.toBeNull();
     expect(result!.pattern).toBe('recursion');
-    expect(result!.detail).toContain('2 levels deep');
+    expect(result!.detail).toContain('Calls itself directly');
   });
 
-  it('detects indirect recursion (A → B → A)', () => {
+  it('does NOT flag indirect re-entry (A → B → A)', () => {
+    // Indistinguishable from V8 inlining a callee into its caller, so not claimed.
     const nodes: AggregatedNode[] = [
       makeNode(1, '(root)', null, [2]),
       makeNode(2, 'fnA', 1, [3], 5, 100, 42),
@@ -158,9 +174,22 @@ describe('suggest_optimizations – recursion', () => {
       makeNode(4, 'fnA', 3, [], 80, 80, 42),
     ];
     const profile = makeProfile(nodes);
-    const result = detectRecursion(profile, FN_A);
-    expect(result).not.toBeNull();
-    expect(result!.pattern).toBe('recursion');
+    expect(detectRecursion(profile, FN_A)).toBeNull();
+  });
+
+  it('does NOT flag a nested loop whose callee V8 inlined back into it', () => {
+    // The NP-2 shape: 14% of self-time sat under the inner frame, clearing the gate.
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2]),
+      makeNode(2, 'runWorkload', 1, [3], 0, 1000),
+      makeNode(3, 'findNearbyTrails', 2, [4], 700, 1000, 22),
+      makeNode(4, 'haversine', 3, [5], 100, 300, 11),
+      makeNode(5, 'findNearbyTrails', 4, [], 200, 200, 22),
+    ];
+    const profile = makeProfile(nodes);
+    expect(
+      detectRecursion(profile, { functionName: 'findNearbyTrails', url: TEST_URL, lineNumber: 22 }),
+    ).toBeNull();
   });
 
   it('does NOT flag a structural self-edge that carries negligible self-time', () => {
@@ -292,6 +321,16 @@ describe('suggest_optimizations – hot caller', () => {
     ];
     const profile = makeProfile(nodes);
     expect(detectHotCaller(profile, 'hotFn')).toBeNull();
+  });
+
+  it('does NOT name a synthetic V8 frame as the hot caller', () => {
+    // "(garbage collector)" hangs off "(root)", which cannot be made to call it less.
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2]),
+      makeNode(2, '(garbage collector)', 1, [], 500, 500),
+    ];
+    const profile = makeProfile(nodes);
+    expect(detectHotCaller(profile, '(garbage collector)')).toBeNull();
   });
 });
 
