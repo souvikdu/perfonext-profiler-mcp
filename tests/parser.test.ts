@@ -175,4 +175,32 @@ describe('Chrome Trace JSON parser', () => {
     expect(names).toContain('JSON.parse');
     expect(names).toContain('layout');
   });
+
+  it('does not mistake a .cpuprofile for a trace because a frame mentions traceEvents', () => {
+    const profile = parseCpuProfile(
+      JSON.stringify({
+        nodes: [
+          {
+            id: 1,
+            callFrame: {
+              functionName: 'traceEvents',
+              scriptId: '1',
+              url: 'file:///app/src/trace.js',
+              lineNumber: 0,
+              columnNumber: 0,
+            },
+            hitCount: 1,
+            children: [],
+          },
+        ],
+        startTime: 0,
+        endTime: 10000,
+        samples: [1],
+        timeDeltas: [10000],
+      }),
+      'looks-like-a-trace.cpuprofile',
+    );
+
+    expect(profile.nodes.get(1)!.callFrame.functionName).toBe('traceEvents');
+  });
 });

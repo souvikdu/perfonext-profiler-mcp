@@ -37,25 +37,34 @@ interface TraceProfileNode {
 }
 
 /**
- * Detects whether the JSON string is a Chrome Trace format or V8 .cpuprofile format.
+ * Detects whether parsed JSON is a Chrome Trace or a V8 .cpuprofile. Inspects the parsed value
+ * rather than the source text: a `.cpuprofile` can legitimately contain the string `"traceEvents"`
+ * inside a script URL or function name.
  */
-export function detectFormat(json: string): 'cpuprofile' | 'trace' {
-  // Quick heuristic: trace files have "traceEvents" key or start with array
-  const trimmed = json.trimStart();
-  if (trimmed.startsWith('[') || json.includes('"traceEvents"')) {
+export function detectFormat(raw: unknown): 'cpuprofile' | 'trace' {
+  if (Array.isArray(raw)) {
     return 'trace';
   }
+
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    Array.isArray((raw as { traceEvents?: unknown }).traceEvents)
+  ) {
+    return 'trace';
+  }
+
   return 'cpuprofile';
 }
 
 /**
  * Parses Chrome Trace JSON and extracts a CpuProfile by reassembling ProfileChunk events.
  */
-export function parseTraceProfile(json: string): CpuProfile {
-  const raw = JSON.parse(json);
-
+export function parseTraceProfile(raw: unknown): CpuProfile {
   // Handle both formats: { traceEvents: [...] } or just [...]
-  const events: TraceEvent[] = Array.isArray(raw) ? raw : raw.traceEvents;
+  const events: TraceEvent[] = Array.isArray(raw)
+    ? (raw as TraceEvent[])
+    : ((raw as { traceEvents?: TraceEvent[] })?.traceEvents ?? []);
 
   if (!events || !Array.isArray(events)) {
     throw new Error('Invalid Chrome Trace format: missing traceEvents array');
