@@ -78,9 +78,9 @@ describe('suggest_optimizations – deduplication', () => {
     const nodes: AggregatedNode[] = [
       makeNode(1, '(root)', null, [2]),
       makeNode(2, 'entry', 1, [3, 4]),
-      makeNode(3, 'hotFn', 2, [], 100, 100),
+      makeNode(3, 'hotFn', 2, [], 100, 100, 42),
       makeNode(4, 'callerB', 2, [5]),
-      makeNode(5, 'hotFn', 4, [], 80, 80),
+      makeNode(5, 'hotFn', 4, [], 80, 80, 42),
     ];
     const profile = makeProfile(nodes);
     const { getHotspots } = await import('../src/parser/call-tree.js');
@@ -92,8 +92,25 @@ describe('suggest_optimizations – deduplication', () => {
     expect(hotFnEntries).toHaveLength(1);
     // Merged selfTime should equal sum of both nodes (100 + 80)
     expect(hotFnEntries[0].selfTime).toBe(180);
+    // Both call-tree nodes are accounted for
+    expect(hotFnEntries[0].occurrences).toBe(2);
     // Percents recomputed from merged times — must not exceed 100
     expect(hotFnEntries[0].selfPercent).toBeLessThanOrEqual(100);
+  });
+
+  it('keeps distinct functions declared at different lines of the same file apart', async () => {
+    const nodes: AggregatedNode[] = [
+      makeNode(1, '(root)', null, [2, 3]),
+      makeNode(2, '(anonymous)', 1, [], 100, 100, 10),
+      makeNode(3, '(anonymous)', 1, [], 80, 80, 250),
+    ];
+    const profile = makeProfile(nodes);
+    const { getHotspots } = await import('../src/parser/call-tree.js');
+    const deduped = deduplicateHotspots(getHotspots(profile, 10), profile.totalDuration);
+
+    const anon = deduped.filter((h) => h.functionName === '(anonymous)');
+    expect(anon).toHaveLength(2);
+    expect(anon.map((h) => h.lineNumber).sort((a, b) => a - b)).toEqual([11, 251]);
   });
 });
 
@@ -398,8 +415,8 @@ describe('suggest_optimizations – full tool', () => {
       makeNode(1, '(root)', null, [2, 3]),
       makeNode(2, 'caller1', 1, [4]),
       makeNode(3, 'caller2', 1, [5]),
-      makeNode(4, 'sharedWork', 2, [], 200, 200),
-      makeNode(5, 'sharedWork', 3, [], 150, 150),
+      makeNode(4, 'sharedWork', 2, [], 200, 200, 77),
+      makeNode(5, 'sharedWork', 3, [], 150, 150, 77),
     ];
     const profile = makeProfile(nodes);
 

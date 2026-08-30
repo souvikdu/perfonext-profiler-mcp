@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getProfile } from '../store.js';
-import { getHotspots } from '../parser/call-tree.js';
+import { describeFrameOrigin, getHotspots } from '../parser/call-tree.js';
 
 export function registerGetHotspots(server: McpServer) {
   server.registerTool(
@@ -40,7 +40,8 @@ export function registerGetHotspots(server: McpServer) {
         function: h.functionName,
         file: h.url,
         line: h.lineNumber,
-        package: h.package ?? '(user code)',
+        package: describeFrameOrigin(h.url),
+        occurrences: h.occurrences,
         selfTime: `${(h.selfTime / 1000).toFixed(1)}ms`,
         selfPercent: `${h.selfPercent.toFixed(1)}%`,
         totalTime: `${(h.totalTime / 1000).toFixed(1)}ms`,
@@ -56,7 +57,16 @@ export function registerGetHotspots(server: McpServer) {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ hotspots: formatted, nextStep }, null, 2),
+            text: JSON.stringify(
+              {
+                hotspots: formatted,
+                occurrencesNote:
+                  'occurrences is how many call-tree nodes were merged into this row (same function, file and line). selfTime is additive across them; totalTime is not, because a function that appears at several depths includes the same nested work more than once.',
+                nextStep,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };

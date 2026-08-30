@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-30
+
+### Changed
+
+- **BREAKING: one function is now one row.** Sampling splits a single function across many call-tree nodes, one per call site. `get_hotspots` previously ranked those nodes, so a function called from three places was listed three times, each row understating its true cost, and three of the limited result slots were spent on the same function. Nodes are now merged by function name, file, and declaration line _before_ the list is truncated, so the ranking reflects total cost. Each row gains an `occurrences` field recording how many call-tree nodes were merged, and an `occurrencesNote` explains that `selfTime` sums across those nodes but `totalTime` does not.
+- **BREAKING: `get_package_costs` renamed `totalTime` to `totalTimeIncludingCallbacks`** (and `totalPercent` to `totalPercentIncludingCallbacks`). The figure includes everything the package called into, including your own callbacks passed back into it, so it routinely exceeded the package's actual cost. The name now says which denominator it uses. `topFunctions` entries also gain `file` and `line`, and are deduplicated by the same identity rule as `get_hotspots`.
+- **BREAKING: `explain_function` renamed `callers[].totalTime` to `callerTotalTime`.** The value is the caller's own total across the profile, not the time it contributed to this function; the old name invited reading it as an edge weight. A `callersNote` states this, and warns that V8 inlining can make a function appear as both a caller and a callee of itself. `locations` no longer repeats the same file and line once per call site.
+- **BREAKING: `compare_profiles` no longer merges same-named functions from different files.** Functions are matched by name _and_ file, so a `handler` in two modules is no longer reported as a single entry whose delta is the sum of two unrelated changes. `topChanges` entries gain `file` and `line`, and an `identityNote` records the matching rule. Matching deliberately ignores the declaration line, because the two profiles come from different builds where an unrelated edit shifts lines and would otherwise report a function as removed and re-added.
+- Frames with no script URL are now labelled `(native)` rather than `(user code)` in `get_hotspots`. They are still excluded from `get_package_costs`, which attributes cost to packages on disk.
+
 ## [0.6.5] - 2026-08-29
 
 ### Fixed

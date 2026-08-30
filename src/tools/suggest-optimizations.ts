@@ -20,11 +20,10 @@ export interface PatternMatch {
 }
 
 /**
- * A function call frame. Identity for matching purposes is `functionName` + `url`
- * only (see identityKey below) — the same as `deduplicateHotspots` merges them.
- * `lineNumber` is carried for display but deliberately excluded from the key: a
- * deduplicated `HotspotEntry` keeps only one representative line, so keying on it
- * here would silently fail to match other call-tree nodes for the same function.
+ * A function call frame. Identity for matching profile nodes is `functionName` + `url` only
+ * (see identityKey below). `lineNumber` is carried for display but excluded from the key:
+ * `HotspotEntry.lineNumber` is 1-based while raw call frames are 0-based, and detectors need to
+ * reach every node of the function regardless of which declaration line the hotspot row carries.
  */
 export interface FunctionIdentity {
   functionName: string;
@@ -308,7 +307,7 @@ export function deduplicateHotspots(
 ): HotspotEntry[] {
   const seen = new Map<string, HotspotEntry>();
   for (const h of hotspots) {
-    const key = `${h.functionName}::${h.url}`;
+    const key = `${h.functionName}::${h.url}::${h.lineNumber}`;
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, { ...h });
@@ -316,7 +315,7 @@ export function deduplicateHotspots(
       existing.selfTime += h.selfTime;
       existing.totalTime += h.totalTime;
       existing.hitCount += h.hitCount;
-      if (h.lineNumber < existing.lineNumber) existing.lineNumber = h.lineNumber;
+      existing.occurrences += h.occurrences;
     }
   }
   // Recompute percents from the merged absolute times using the original denominator

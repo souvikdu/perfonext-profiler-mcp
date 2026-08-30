@@ -1,4 +1,4 @@
-import { AggregatedNode, ParsedProfile } from './types.js';
+import { AggregatedNode, CallFrame, ParsedProfile } from './types.js';
 
 /**
  * Extract the npm package name from a V8 URL, or null for user code / builtins.
@@ -15,6 +15,21 @@ export function extractPackageName(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * The single identity rule for a function across every tool in this server. Sampling splits one
+ * logical function into many nodes, so tools must aggregate on this instead of the bare name —
+ * otherwise the same function is reported several times with a fraction of its cost each.
+ */
+export function frameKey(frame: CallFrame): string {
+  return `${frame.functionName}::${frame.url}::${frame.lineNumber}`;
+}
+
+/** Empty URLs are V8/Node internals — there is no source file to open, so say so. */
+export function describeFrameOrigin(url: string): string {
+  if (!url) return '(native)';
+  return extractPackageName(url) ?? '(user code)';
+}
+
 export interface HotspotEntry {
   functionName: string;
   url: string;
@@ -24,31 +39,50 @@ export interface HotspotEntry {
   selfPercent: number;
   totalPercent: number;
   hitCount: number;
+  occurrences: number;
   package: string | null;
 }
 
 export function getHotspots(profile: ParsedProfile, limit: number): HotspotEntry[] {
-  const nodes = Array.from(profile.nodes.values())
-    .filter(
-      (n) =>
-        n.selfTime > 0 &&
-        n.callFrame.functionName !== '(idle)' &&
-        n.callFrame.functionName !== '(root)',
-    )
-    .sort((a, b) => b.selfTime - a.selfTime)
-    .slice(0, limit);
+  const aggregated = new Map<string, HotspotEntry>();
 
-  return nodes.map((n) => ({
-    functionName: n.callFrame.functionName || '(anonymous)',
-    url: n.callFrame.url,
-    lineNumber: n.callFrame.lineNumber + 1, // Convert 0-based to 1-based
-    selfTime: n.selfTime,
-    totalTime: n.totalTime,
-    selfPercent: (n.selfTime / profile.totalDuration) * 100,
-    totalPercent: (n.totalTime / profile.totalDuration) * 100,
-    hitCount: n.hitCount,
-    package: extractPackageName(n.callFrame.url),
-  }));
+  for (const node of profile.nodes.values()) {
+    if (node.selfTime <= 0) continue;
+    if (node.callFrame.functionName === '(idle)' || node.callFrame.functionName === '(root)') {
+      continue;
+    }
+
+    const existing = aggregated.get(frameKey(node.callFrame));
+    if (existing) {
+      existing.selfTime += node.selfTime;
+      existing.totalTime += node.totalTime;
+      existing.hitCount += node.hitCount;
+      existing.occurrences += 1;
+      continue;
+    }
+
+    aggregated.set(frameKey(node.callFrame), {
+      functionName: node.callFrame.functionName || '(anonymous)',
+      url: node.callFrame.url,
+      lineNumber: node.callFrame.lineNumber + 1, // Convert 0-based to 1-based
+      selfTime: node.selfTime,
+      totalTime: node.totalTime,
+      selfPercent: 0,
+      totalPercent: 0,
+      hitCount: node.hitCount,
+      occurrences: 1,
+      package: extractPackageName(node.callFrame.url),
+    });
+  }
+
+  return Array.from(aggregated.values())
+    .sort((a, b) => b.selfTime - a.selfTime)
+    .slice(0, limit)
+    .map((entry) => ({
+      ...entry,
+      selfPercent: profile.totalDuration > 0 ? (entry.selfTime / profile.totalDuration) * 100 : 0,
+      totalPercent: profile.totalDuration > 0 ? (entry.totalTime / profile.totalDuration) * 100 : 0,
+    }));
 }
 
 export interface CallTreeNode {
@@ -125,26 +159,66 @@ function buildTreeRecursive(
   };
 }
 
-export function getCallersOf(profile: ParsedProfile, functionName: string): AggregatedNode[] {
-  const targets: AggregatedNode[] = [];
+export interface CallSiteEntry {
+  functionName: string;
+  url: string;
+  lineNumber: number;
+  selfTime: number;
+  totalTime: number;
+  occurrences: number;
+}
+
+/** Collapse a set of profile nodes into one row per distinct function, summing their times. */
+function aggregateCallSites(nodes: AggregatedNode[]): CallSiteEntry[] {
+  const merged = new Map<string, CallSiteEntry>();
+  const countedNodeIds = new Set<number>();
+
+  for (const node of nodes) {
+    if (countedNodeIds.has(node.id)) continue;
+    countedNodeIds.add(node.id);
+
+    const key = frameKey(node.callFrame);
+    const existing = merged.get(key);
+    if (existing) {
+      existing.selfTime += node.selfTime;
+      existing.totalTime += node.totalTime;
+      existing.occurrences += 1;
+      continue;
+    }
+
+    merged.set(key, {
+      functionName: node.callFrame.functionName || '(anonymous)',
+      url: node.callFrame.url,
+      lineNumber: node.callFrame.lineNumber + 1,
+      selfTime: node.selfTime,
+      totalTime: node.totalTime,
+      occurrences: 1,
+    });
+  }
+
+  return Array.from(merged.values()).sort((a, b) => b.totalTime - a.totalTime);
+}
+
+export function getCallersOf(profile: ParsedProfile, functionName: string): CallSiteEntry[] {
+  const parents: AggregatedNode[] = [];
   for (const node of profile.nodes.values()) {
     if (node.callFrame.functionName === functionName && node.parent !== null) {
       const parent = profile.nodes.get(node.parent);
-      if (parent) targets.push(parent);
+      if (parent) parents.push(parent);
     }
   }
-  return targets;
+  return aggregateCallSites(parents);
 }
 
-export function getCalleesOf(profile: ParsedProfile, functionName: string): AggregatedNode[] {
-  const callees: AggregatedNode[] = [];
+export function getCalleesOf(profile: ParsedProfile, functionName: string): CallSiteEntry[] {
+  const children: AggregatedNode[] = [];
   for (const node of profile.nodes.values()) {
     if (node.callFrame.functionName === functionName) {
       for (const childId of node.children) {
         const child = profile.nodes.get(childId);
-        if (child) callees.push(child);
+        if (child) children.push(child);
       }
     }
   }
-  return callees;
+  return aggregateCallSites(children);
 }
