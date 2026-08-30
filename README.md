@@ -247,13 +247,15 @@ Functions that appear at multiple call sites are automatically merged before ran
   "package": "lodash",
   "selfTime": "42.3ms",
   "selfPercent": "14.1%",
-  "totalTime": "58.0ms",
-  "totalPercent": "19.3%",
+  "totalTimeIncludingCallbacks": "58.0ms",
+  "totalPercentIncludingCallbacks": "19.3%",
   "topFunctions": [
-    { "function": "chunk", "selfTime": "28.0ms", "selfPercent": "9.3%" }
+    { "function": "chunk", "file": "lodash/chunk.js", "line": 41, "selfTime": "28.0ms", "selfPercent": "9.3%" }
   ]
 }
 ```
+
+`selfTime` is the time spent inside the package's own code. `totalTimeIncludingCallbacks` also counts everything the package called into — including your own callbacks handed back to it — so it can exceed what removing the package would actually save.
 
 Scoped packages (`@babel/core`, `@next/env`, etc.) are handled correctly. User code and native builtins (no `node_modules` in the path) are excluded.
 

@@ -63,21 +63,27 @@ export function registerExplainFunction(server: McpServer) {
         selfTime: matches.reduce((sum, n) => sum + n.selfTime, 0),
         totalTime: matches.reduce((sum, n) => sum + n.totalTime, 0),
         hitCount: matches.reduce((sum, n) => sum + n.hitCount, 0),
-        locations: matches.map((n) => ({
-          file: n.callFrame.url,
-          line: n.callFrame.lineNumber + 1,
-        })),
+        locations: Array.from(
+          new Map(
+            matches.map((n) => [
+              `${n.callFrame.url}::${n.callFrame.lineNumber}`,
+              { file: n.callFrame.url, line: n.callFrame.lineNumber + 1 },
+            ]),
+          ).values(),
+        ),
       };
 
       const callers = getCallersOf(profile, functionName).map((c) => ({
-        function: c.callFrame.functionName || '(anonymous)',
-        file: c.callFrame.url,
-        totalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
+        function: c.functionName,
+        file: c.url,
+        line: c.lineNumber,
+        callerTotalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
       }));
 
       const callees = getCalleesOf(profile, functionName).map((c) => ({
-        function: c.callFrame.functionName || '(anonymous)',
-        file: c.callFrame.url,
+        function: c.functionName,
+        file: c.url,
+        line: c.lineNumber,
         selfTime: `${(c.selfTime / 1000).toFixed(1)}ms`,
         totalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
       }));
@@ -89,6 +95,8 @@ export function registerExplainFunction(server: McpServer) {
         totalTime: `${(aggregated.totalTime / 1000).toFixed(1)}ms`,
         totalPercent: `${((aggregated.totalTime / profile.totalDuration) * 100).toFixed(1)}%`,
         callers,
+        callersNote:
+          "callerTotalTime is each caller's own total time, not the time flowing through this call edge, so these values do not sum to this function's totalTime. V8 inlining can also make one function appear as both a caller and a callee.",
         callees,
       };
 

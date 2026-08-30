@@ -2,11 +2,12 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getProfile } from '../store.js';
 import { ParsedProfile } from '../parser/types.js';
-import { extractPackageName } from '../parser/call-tree.js';
+import { extractPackageName, frameKey } from '../parser/call-tree.js';
 
 export interface PackageFunctionEntry {
   functionName: string;
   url: string;
+  lineNumber: number;
   selfTime: number;
   selfPercent: number;
 }
@@ -15,8 +16,9 @@ export interface PackageCostEntry {
   package: string;
   selfTime: number;
   selfPercent: number;
-  totalTime: number;
-  totalPercent: number;
+  /** Includes time spent in user code that this package called back into (hooks, comparators, callbacks). */
+  totalTimeIncludingCallbacks: number;
+  totalPercentIncludingCallbacks: number;
   nodeCount: number;
   topFunctions: PackageFunctionEntry[];
 }
@@ -37,8 +39,11 @@ export function computePackageCosts(
   const selfMap = new Map<string, number>();
   const totalMap = new Map<string, number>();
   const countMap = new Map<string, number>();
-  // package → list of nodes (for deriving top functions)
-  const nodesMap = new Map<string, { functionName: string; url: string; selfTime: number }[]>();
+  // package → frame identity → merged function entry (sampling splits one function across nodes)
+  const nodesMap = new Map<
+    string,
+    Map<string, { functionName: string; url: string; lineNumber: number; selfTime: number }>
+  >();
 
   for (const node of profile.nodes.values()) {
     // Skip zero-self-time nodes and V8 internals
@@ -50,23 +55,31 @@ export function computePackageCosts(
     totalMap.set(pkg, (totalMap.get(pkg) ?? 0) + node.totalTime);
     countMap.set(pkg, (countMap.get(pkg) ?? 0) + 1);
 
-    const list = nodesMap.get(pkg) ?? [];
-    list.push({
-      functionName: node.callFrame.functionName || '(anonymous)',
-      url: node.callFrame.url,
-      selfTime: node.selfTime,
-    });
-    nodesMap.set(pkg, list);
+    const functions = nodesMap.get(pkg) ?? new Map();
+    const key = frameKey(node.callFrame);
+    const existing = functions.get(key);
+    if (existing) {
+      existing.selfTime += node.selfTime;
+    } else {
+      functions.set(key, {
+        functionName: node.callFrame.functionName || '(anonymous)',
+        url: node.callFrame.url,
+        lineNumber: node.callFrame.lineNumber + 1,
+        selfTime: node.selfTime,
+      });
+    }
+    nodesMap.set(pkg, functions);
   }
 
   const entries: PackageCostEntry[] = [];
   for (const [pkg, selfTime] of selfMap) {
-    const topFunctions = (nodesMap.get(pkg) ?? [])
+    const topFunctions = Array.from((nodesMap.get(pkg) ?? new Map()).values())
       .sort((a, b) => b.selfTime - a.selfTime)
       .slice(0, topFunctionsPerPkg)
       .map((n) => ({
         functionName: n.functionName,
         url: n.url,
+        lineNumber: n.lineNumber,
         selfTime: n.selfTime,
         selfPercent: (n.selfTime / profile.totalDuration) * 100,
       }));
@@ -75,8 +88,8 @@ export function computePackageCosts(
       package: pkg,
       selfTime,
       selfPercent: (selfTime / profile.totalDuration) * 100,
-      totalTime: totalMap.get(pkg) ?? 0,
-      totalPercent: ((totalMap.get(pkg) ?? 0) / profile.totalDuration) * 100,
+      totalTimeIncludingCallbacks: totalMap.get(pkg) ?? 0,
+      totalPercentIncludingCallbacks: ((totalMap.get(pkg) ?? 0) / profile.totalDuration) * 100,
       nodeCount: countMap.get(pkg) ?? 0,
       topFunctions,
     });
@@ -133,10 +146,12 @@ export function registerGetPackageCosts(server: McpServer): void {
         package: c.package,
         selfTime: `${(c.selfTime / 1000).toFixed(1)}ms`,
         selfPercent: `${c.selfPercent.toFixed(1)}%`,
-        totalTime: `${(c.totalTime / 1000).toFixed(1)}ms`,
-        totalPercent: `${c.totalPercent.toFixed(1)}%`,
+        totalTimeIncludingCallbacks: `${(c.totalTimeIncludingCallbacks / 1000).toFixed(1)}ms`,
+        totalPercentIncludingCallbacks: `${c.totalPercentIncludingCallbacks.toFixed(1)}%`,
         topFunctions: c.topFunctions.map((f) => ({
           function: f.functionName,
+          file: f.url,
+          line: f.lineNumber,
           selfTime: `${(f.selfTime / 1000).toFixed(1)}ms`,
           selfPercent: `${f.selfPercent.toFixed(1)}%`,
         })),
@@ -148,7 +163,15 @@ export function registerGetPackageCosts(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ packages: formatted, nextStep }, null, 2),
+            text: JSON.stringify(
+              {
+                packages: formatted,
+                note: 'selfTime is CPU spent inside the package itself and is what you should rank by. totalTimeIncludingCallbacks also counts your own code that the package called back into (comparators, hooks, render callbacks), so a thin wrapper around expensive user code can look costly there.',
+                nextStep,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };

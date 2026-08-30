@@ -131,7 +131,7 @@ describe('call-tree analysis', () => {
 
     const callers = getCallersOf(profile, 'JSON.parse');
     expect(callers.length).toBe(1);
-    expect(callers[0].callFrame.functionName).toBe('processData');
+    expect(callers[0].functionName).toBe('processData');
 
     const callees = getCalleesOf(profile, 'processData');
     expect(callees.length).toBe(2); // JSON.parse and transformResult
