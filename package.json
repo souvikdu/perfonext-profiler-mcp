@@ -57,7 +57,7 @@
     "@types/node": "^25.6.0",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^10.0.1",
-    "globals": "^15.14.0",
+    "globals": "^17.11.0",
     "prettier": "^3.4.2",
     "shx": "^0.4.0",
     "typescript": "^6.0.3",
