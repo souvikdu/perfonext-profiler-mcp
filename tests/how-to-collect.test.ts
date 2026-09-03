@@ -3,19 +3,23 @@ import { buildCollectRecipe, registerHowToCollect } from '../src/tools/how-to-co
 import { createToolHandlerStub } from './helpers/tool-stub.js';
 
 describe('how_to_collect recipe', () => {
-  it('builds the next-server recipe', () => {
+  it('builds the next-server recipe with a standalone fallback', () => {
     const recipe = buildCollectRecipe('next-server');
     expect(recipe.scenario).toBe('next-server');
     expect(recipe.command).toBe(
       'node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start',
     );
     expect(recipe.outputDir).toBe('./.perf-profiles');
+    expect(recipe.steps.some((step) => step.includes('standalone'))).toBe(true);
+    expect(recipe.steps.some((step) => step.includes('.next/standalone/server.js'))).toBe(true);
   });
 
-  it('returns a node --cpu-prof command for the script scenario', () => {
+  it('uses .next/standalone/server.js as the script example', () => {
     const recipe = buildCollectRecipe('script');
     expect(recipe.scenario).toBe('script');
-    expect(recipe.command).toBe('node --cpu-prof --cpu-prof-dir=./.perf-profiles your-script.js');
+    expect(recipe.command).toBe(
+      'node --cpu-prof --cpu-prof-dir=./.perf-profiles .next/standalone/server.js',
+    );
   });
 
   it('always includes a nextStep pointing at load_profile', () => {

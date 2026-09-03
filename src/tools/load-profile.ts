@@ -12,7 +12,11 @@ import { storeProfile } from '../store.js';
 export function formatLoadProfileError(err: unknown, absPath: string): string {
   const code = (err as NodeJS.ErrnoException).code;
   if (code === 'ENOENT') {
-    return `Error: No file found at "${absPath}". load_profile needs the path to a single .cpuprofile or Chrome trace .json file.`;
+    return (
+      `Error: No file found at "${absPath}". load_profile needs the path to a single .cpuprofile or Chrome trace .json file. ` +
+      'No profile was written. Re-run how_to_collect. If next start failed because of standalone output, ' +
+      'profile .next/standalone/server.js instead.'
+    );
   }
   if (code === 'EISDIR') {
     return `Error: "${absPath}" is a directory. load_profile only accepts a single profile file path, not a directory.`;

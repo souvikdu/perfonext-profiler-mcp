@@ -34,6 +34,7 @@ describe('load_profile error handling', () => {
     const result = await call('load_profile', { filePath: '/tmp/does-not-exist.cpuprofile' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('No file found');
+    expect(result.content[0].text).toContain('how_to_collect');
     expect(result.content[0].text).not.toContain('ENOENT');
   });
 
@@ -165,7 +166,9 @@ describe('load_profile error handling', () => {
 describe('formatLoadProfileError', () => {
   it('maps ENOENT to a friendly message', () => {
     const err = Object.assign(new Error('boom'), { code: 'ENOENT' });
-    expect(formatLoadProfileError(err, '/x/y.cpuprofile')).toContain('No file found');
+    const message = formatLoadProfileError(err, '/x/y.cpuprofile');
+    expect(message).toContain('No file found');
+    expect(message).toContain('how_to_collect');
   });
 
   it('maps EISDIR to a friendly message', () => {
