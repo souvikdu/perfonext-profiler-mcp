@@ -166,7 +166,7 @@ Every tool result carries a `nextStep` breadcrumb pointing at the natural follow
 }
 ```
 
-`next-server` profiles a production Next.js server while it serves a single request; `script` profiles a standalone Node.js script. Node writes one `.cpuprofile` per process/worker thread into the output directory. The Next server command uses Node CLI flags (not `NODE_OPTIONS`) so it is the same on Unix and Windows.
+`next-server` profiles a production Next.js server while it serves a single request. If `next start` says standalone output is unsupported, use the `script` scenario with `.next/standalone/server.js`. `script` profiles that standalone server (or another Node entry). Keep the scenario to one route and one hit. Node writes one `.cpuprofile` per process/worker thread into the output directory. The Next server command uses Node CLI flags (not `NODE_OPTIONS`) so it is the same on Unix and Windows.
 
 ### `read_source_context` details
 
@@ -267,13 +267,13 @@ Next.js production server (profile a single request):
 
 ```bash
 node --cpu-prof --cpu-prof-dir=./.perf-profiles ./node_modules/next/dist/bin/next start
-# hit the route once, then Ctrl-C to flush the profile
+# hit the route once, then stop the process so it can exit and write the profile
 ```
 
-Standalone Node.js script:
+If `next start` reports that standalone output is unsupported:
 
 ```bash
-node --cpu-prof --cpu-prof-dir=./.perf-profiles your-script.js
+node --cpu-prof --cpu-prof-dir=./.perf-profiles .next/standalone/server.js
 ```
 
 Chrome DevTools:

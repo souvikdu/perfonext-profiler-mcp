@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-03
+
+### Fixed
+
+- `how_to_collect` `next-server` now says to switch to the `script` scenario with `.next/standalone/server.js` when `next start` reports that standalone output is unsupported.
+- The `script` scenario uses `.next/standalone/server.js` as the example entry and keeps the one-route, one-hit collection steps.
+- A missing profile file now tells the agent that nothing was written, to re-run `how_to_collect`, and to profile `.next/standalone/server.js` when standalone output blocked `next start`.
+
 ## [0.7.0] - 2026-08-30
 
 ### Changed

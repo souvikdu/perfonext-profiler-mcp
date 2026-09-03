@@ -5,7 +5,7 @@ export type CollectScenario = 'next-server' | 'script';
 
 const PROFILE_DIR = './.perf-profiles';
 const NEXT_SERVER_COMMAND = `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} ./node_modules/next/dist/bin/next start`;
-const SCRIPT_COMMAND = `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} your-script.js`;
+const SCRIPT_COMMAND = `node --cpu-prof --cpu-prof-dir=${PROFILE_DIR} .next/standalone/server.js`;
 
 export interface CollectRecipe {
   scenario: CollectScenario;
@@ -25,16 +25,19 @@ export function buildCollectRecipe(scenario: CollectScenario): CollectRecipe {
     return {
       scenario,
       summary:
-        'Profile a standalone Node.js script. Node writes one .cpuprofile per ' +
-        'process/worker thread into the output directory.',
+        'Profile a Next.js standalone server (output: "standalone"), or substitute another Node entry. ' +
+        'Keep the scenario narrow (one route, one hit) so the profile stays focused. Node writes one ' +
+        '.cpuprofile per process/worker thread into the output directory.',
       command: SCRIPT_COMMAND,
       steps: [
-        `Run: ${SCRIPT_COMMAND}`,
-        'Let the script finish (the profile is flushed on exit).',
+        'Build first if you have not already: next build',
+        `Start the process with profiling: ${SCRIPT_COMMAND}`,
+        'Hit the route you want to profile exactly once (e.g. curl http://localhost:3000/your-route).',
+        'Stop the process so it can exit and write the .cpuprofile.',
         `Load the result: load_profile({ filePath: "${PROFILE_DIR}/<file>.cpuprofile" })`,
       ],
       outputDir: PROFILE_DIR,
-      nextStep: `Once the script exits, call load_profile with the .cpuprofile written under "${PROFILE_DIR}".`,
+      nextStep: `Once the process exits, call load_profile with the .cpuprofile written under "${PROFILE_DIR}".`,
     };
   }
 
@@ -48,8 +51,9 @@ export function buildCollectRecipe(scenario: CollectScenario): CollectRecipe {
     steps: [
       'Build first if you have not already: next build',
       `Start the server with profiling: ${NEXT_SERVER_COMMAND}`,
+      'If next start says standalone output is unsupported, use the script scenario with .next/standalone/server.js instead.',
       'Hit the route you want to profile exactly once (e.g. curl http://localhost:3000/your-route).',
-      'Stop the server with Ctrl-C — Node flushes the .cpuprofile on exit.',
+      'Stop the server so the process can exit and write the .cpuprofile.',
       `Load the result: load_profile({ filePath: "${PROFILE_DIR}/<file>.cpuprofile" })`,
     ],
     outputDir: PROFILE_DIR,
@@ -72,7 +76,7 @@ export function registerHowToCollect(server: McpServer): void {
           .optional()
           .describe(
             'How the code under test runs. "next-server" (default) profiles a Next.js ' +
-              'production server; "script" profiles a standalone Node.js script.',
+              'production server; "script" profiles a Next.js standalone server.js (or another Node entry).',
           ),
       },
     },
