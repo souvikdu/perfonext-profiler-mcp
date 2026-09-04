@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-05
+
+### Added
+
+- Add `mcpName` property (`io.github.souvikdu/perfonext-profiler-mcp`) to `package.json` for MCP Registry package ownership verification.
+- Add MCP Registry `server.json` metadata manifest.
+- Include `README.md` and `LICENSE` in npm distribution package `files`.
+- Automate MCP Registry publication via GitHub Actions OIDC (`mcp-publisher login github-oidc`) upon release tag pushes.
+
 ## [0.7.1] - 2026-09-03
 
 ### Fixed

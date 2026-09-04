@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.souvikdu/perfonext-profiler-mcp",
+  "title": "Perfonext Profiler MCP",
+  "description": "MCP server for analyzing V8/Chrome CPU profiles with line-level tick attribution.",
+  "version": "0.7.2",
+  "repository": {
+    "url": "https://github.com/souvikdu/perfonext-profiler-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@perfonext/profiler-mcp",
+      "version": "0.7.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
