@@ -1,6 +1,7 @@
 {
   "name": "@perfonext/profiler-mcp",
-  "version": "0.7.1",
+  "version": "0.7.2",
+  "mcpName": "io.github.souvikdu/perfonext-profiler-mcp",
   "description": "MCP server for loading and analyzing V8 and Chrome CPU profiles for GitHub Copilot and other MCP clients",
   "type": "module",
   "main": "dist/index.js",
@@ -8,7 +9,9 @@
     "perfonext-profiler-mcp": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
