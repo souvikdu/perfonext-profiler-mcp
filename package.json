@@ -1,6 +1,6 @@
 {
   "name": "@perfonext/profiler-mcp",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "mcpName": "io.github.souvikdu/perfonext-profiler-mcp",
   "description": "MCP server for loading and analyzing V8 and Chrome CPU profiles for GitHub Copilot and other MCP clients",
   "type": "module",
@@ -48,7 +48,7 @@
   "bugs": {
     "url": "https://github.com/souvikdu/perfonext-profiler-mcp/issues"
   },
-  "homepage": "https://github.com/souvikdu/perfonext-profiler-mcp#readme",
+  "homepage": "https://perfonext.github.io/",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

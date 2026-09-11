@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-09-11
+
+### Changed
+
+- **Point the npm homepage at the perfonext site**: `package.json`
+  `homepage` is now `https://perfonext.github.io/`, so the npm
+  listing links the docs site instead of the repo readme, and the
+  README badge row gains a website badge.
+
 ## [0.7.2] - 2026-09-05
 
 ### Added
