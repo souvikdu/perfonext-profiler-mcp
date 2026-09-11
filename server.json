@@ -3,7 +3,7 @@
   "name": "io.github.souvikdu/perfonext-profiler-mcp",
   "title": "Perfonext Profiler MCP",
   "description": "MCP server for analyzing V8/Chrome CPU profiles with line-level tick attribution.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "repository": {
     "url": "https://github.com/souvikdu/perfonext-profiler-mcp",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "npm",
       "identifier": "@perfonext/profiler-mcp",
-      "version": "0.7.2",
+      "version": "0.7.3",
       "transport": {
         "type": "stdio"
       }

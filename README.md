@@ -5,6 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
 [![npm downloads](https://img.shields.io/npm/dt/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
 [![license](https://img.shields.io/npm/l/@perfonext/profiler-mcp)](https://www.npmjs.com/package/@perfonext/profiler-mcp)
+[![website](https://img.shields.io/badge/website-perfonext.github.io-3d611a)](https://perfonext.github.io/)
 
 `perfonext-profiler-mcp` is a Model Context Protocol (MCP) server that gives GitHub Copilot, Claude Desktop,
 Claude Code, and other MCP clients structured CPU profiling data for Next.js performance work. It loads V8 and
