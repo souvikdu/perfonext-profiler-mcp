@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  publish:
+  publish-npm:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,6 +37,33 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --provenance
+
+  publish-registry:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Wait for version to appear on npm
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          for i in $(seq 1 60); do
+            if [ "$(npm view "$NAME@$VER" version 2>/dev/null)" = "$VER" ]; then
+              echo "npm has $NAME@$VER (attempt $i)"
+              exit 0
+            fi
+            echo "attempt $i: $NAME@$VER not yet visible, waiting…"
+            sleep 10
+          done
+          echo "timed out waiting for $NAME@$VER on npm"
+          exit 1
 
       - name: Install mcp-publisher
         run: |

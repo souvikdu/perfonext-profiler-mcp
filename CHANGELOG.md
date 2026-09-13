@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Split the publish workflow into two jobs**: `publish-npm`
+  runs the existing install, build, test, and `npm publish`
+  steps, and a new `publish-registry` job waits for the version
+  to appear on npm (polls `npm view` every 10 seconds, up to 10
+  minutes) before running `mcp-publisher publish server.json`.
+  The registry job only re-runs on its own when retried, so a
+  slow npm propagation no longer fails the release with a 400
+  and retrying never replays `npm publish`.
+
 ## [0.7.3] - 2026-09-11
 
 ### Changed
